@@ -25,7 +25,6 @@ const CycleTrading = ({ account, provider, chainId }) => {
   
   // PancakeSwap V3 地址
   const V3_POOL_ADDRESS = '0x380aaDF63D84D3A434073F1d5d95f02fB23d5228';
-  const SMART_ROUTER_V3_ADDRESS = '0x13f4EA83D0bd40E75C8222255bc855a974568Dd4';
 
   // 自动获取代币余额
   useEffect(() => {
@@ -669,7 +668,7 @@ const CycleTrading = ({ account, provider, chainId }) => {
       setCycleStatus(`第 ${cycleIndex} 次循环：刷新余额...`);
       
       // 刷新余额
-      const [brBalanceBefore, usdtBalanceBefore] = await refreshAllBalances();
+      await refreshAllBalances();
       
       // 检查是否被用户停止
       if (shouldStopRef.current) {

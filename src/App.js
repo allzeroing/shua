@@ -9,7 +9,6 @@ import './App.css';
 function App() {
   const [account, setAccount] = useState('');
   const [provider, setProvider] = useState(null);
-  const [signer, setSigner] = useState(null);
   const [chainId, setChainId] = useState('');
   const [balance, setBalance] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
@@ -236,7 +235,6 @@ function App() {
   const disconnectWallet = () => {
     setAccount('');
     setProvider(null);
-    setSigner(null);
     setChainId('');
     setBalance('');
   };
@@ -353,7 +351,7 @@ function App() {
         clearInterval(connectionCheck);
       };
     }
-  }, []); // 移除依赖，避免重复绑定监听器
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 获取网络信息
   const getCurrentNetwork = () => {

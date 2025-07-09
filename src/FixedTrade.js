@@ -76,8 +76,7 @@ const FixedTrade = ({ account, provider, chainId }) => {
   const BR_ADDRESS = '0xff7d6a96ae471bbcd7713af9cb1feeb16cf56b41';
   
   // PancakeSwap V3 地址
-  const V3_POOL_ADDRESS = '0x380aaDF63D84D3A434073F1d5d95f02fB23d5228'; // V3 Pool 合约地址 
-  const SMART_ROUTER_V3_ADDRESS = '0x13f4EA83D0bd40E75C8222255bc855a974568Dd4'; // V3 SmartRouter
+  const V3_POOL_ADDRESS = '0x380aaDF63D84D3A434073F1d5d95f02fB23d5228'; // V3 Pool 合约地址
   
   // V3 查询价格：从 Pool 合约的 slot0 获取 sqrtPriceX96 计算价格
   const getAmountOutV3 = async (usdtAmountInput) => {
@@ -124,9 +123,6 @@ const FixedTrade = ({ account, provider, chainId }) => {
       // price = (sqrtPriceX96 / 2^96)^2
       
       console.log('sqrtPriceX96:', sqrtPriceX96.toString());
-      
-      // 将USDT数量转换为Wei
-      const usdtAmountWei = ethers.parseUnits(usdtAmountInput.toString(), 18);
       
       // 为避免极大数运算，分步计算
       // 2^96 = 79228162514264337593543950336

@@ -76,7 +76,7 @@ const TokenSwap = ({ account, provider, chainId }) => {
     };
 
     updateFromTokenBalance();
-  }, [fromToken, account, provider, tokens]);
+  }, [fromToken, account, provider, tokens]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 选择代币
   const selectFromToken = (tokenName) => {
