@@ -14,6 +14,8 @@ const CycleTrading = ({ account, provider, chainId }) => {
   const [cycleHistory, setCycleHistory] = useState([]); // 循环历史
   const [lastBalanceUpdate, setLastBalanceUpdate] = useState(null); // 最后余额更新时间
   const [isLoadingBalance, setIsLoadingBalance] = useState(false); // 余额加载状态
+  const [debugLogs, setDebugLogs] = useState([]); // 调试日志
+  const [showDebugLogs, setShowDebugLogs] = useState(false); // 是否显示调试日志
   const shouldStopRef = useRef(false); // 用于控制是否停止循环
 
   // 合约地址
@@ -25,6 +27,34 @@ const CycleTrading = ({ account, provider, chainId }) => {
   
   // PancakeSwap V3 地址
   const V3_POOL_ADDRESS = '0x380aaDF63D84D3A434073F1d5d95f02fB23d5228';
+
+  // 日志记录函数
+  const addDebugLog = (message, level = 'info') => {
+    const timestamp = new Date().toLocaleTimeString();
+    const logEntry = {
+      timestamp,
+      message,
+      level, // 'info', 'success', 'warning', 'error'
+      id: Date.now() + Math.random()
+    };
+    
+    setDebugLogs(prev => {
+      const newLogs = [...prev, logEntry];
+      // 限制日志数量，最多保留100条
+      if (newLogs.length > 100) {
+        return newLogs.slice(-100);
+      }
+      return newLogs;
+    });
+    
+    // 同时输出到控制台
+    console.log(`[${timestamp}] ${message}`);
+  };
+
+  // 清空日志
+  const clearDebugLogs = () => {
+    setDebugLogs([]);
+  };
 
   // 自动获取代币余额
   useEffect(() => {
@@ -572,8 +602,13 @@ const CycleTrading = ({ account, provider, chainId }) => {
       console.error('完整错误对象:', error);
       
       // 分析具体错误原因
-      if (error.message.includes('user rejected')) {
-        console.error('用户拒绝了交易');
+      if (isUserRejectedError(error)) {
+        console.error('🚫 用户拒绝了交易签名');
+        // 抛出标准化的用户拒绝错误
+        const userRejectedError = new Error('用户拒绝签名');
+        userRejectedError.code = 4001;
+        userRejectedError.originalError = error;
+        throw userRejectedError;
       } else if (error.message.includes('insufficient funds')) {
         console.error('余额不足');
       } else if (error.message.includes('gas required exceeds allowance')) {
@@ -594,6 +629,32 @@ const CycleTrading = ({ account, provider, chainId }) => {
       
       throw error;
     }
+  };
+
+  // 检测用户拒绝签名的错误
+  const isUserRejectedError = (error) => {
+    if (!error) return false;
+    
+    // 检查错误代码
+    if (error.code === 4001) return true;
+    
+    // 检查错误消息
+    const errorMessage = error.message?.toLowerCase() || '';
+    const userRejectedKeywords = [
+      'user rejected',
+      'user denied',
+      'user cancelled',
+      'user canceled',
+      'transaction was rejected',
+      'transaction rejected',
+      'user rejected transaction',
+      'user denied transaction request',
+      'metamask tx signature',
+      'reject',
+      'denied'
+    ];
+    
+    return userRejectedKeywords.some(keyword => errorMessage.includes(keyword));
   };
 
   // 等待并重试余额检查
@@ -667,8 +728,9 @@ const CycleTrading = ({ account, provider, chainId }) => {
       
       setCycleStatus(`第 ${cycleIndex} 次循环：刷新余额...`);
       
-      // 刷新余额
+      // 刷新余额并记录购买前的BR余额
       await refreshAllBalances();
+      const brBalanceBeforeBuy = parseFloat(brBalance); // 记录购买前的BR余额
       
       // 检查是否被用户停止
       if (shouldStopRef.current) {
@@ -690,15 +752,16 @@ const CycleTrading = ({ account, provider, chainId }) => {
       
       const minBRAmount = (parseFloat(expectedBRAmount) * 0.99985).toFixed(8);
       
-      console.log(`🔔 准备发起第 ${cycleIndex} 次循环的购买BR交易，即将拉起钱包...`);
+      addDebugLog(`🔔 准备发起第 ${cycleIndex} 次循环的购买BR交易，即将拉起钱包...`, 'info');
+      addDebugLog(`购买前BR余额: ${brBalanceBeforeBuy} BR`, 'info');
       setCycleStatus(`第 ${cycleIndex} 次循环：准备购买BR，等待钱包签名...`);
       
       const buyReceipt = await executeTransaction(true, usdtAmountPerCycle, minBRAmount);
       
-      console.log(`✅ 第 ${cycleIndex} 次循环的购买BR交易已完成，交易hash: ${buyReceipt.transactionHash}`);
+      addDebugLog(`✅ 第 ${cycleIndex} 次循环的购买BR交易已完成，交易hash: ${buyReceipt.transactionHash}`, 'success');
       
       // 等待BR余额更新
-      const minimumBrExpected = parseFloat(minBRAmount) * 0.8; // 预期的80%作为最小值
+      const minimumBrExpected = brBalanceBeforeBuy + parseFloat(minBRAmount) * 0.8; // 购买前余额 + 预期购买量的80%
       setCycleStatus(`第 ${cycleIndex} 次循环：等待BR余额更新...`);
       const currentBrBalance = await waitForBalanceUpdate(
         getBRBalance,
@@ -706,13 +769,27 @@ const CycleTrading = ({ account, provider, chainId }) => {
         'BR余额'
       );
       
+      // 计算实际购买到的BR数量
+      const actualBrBought = parseFloat(currentBrBalance) - brBalanceBeforeBuy;
+      addDebugLog(`📊 第 ${cycleIndex} 次循环购买BR统计:`, 'info');
+      addDebugLog(`  购买前余额: ${brBalanceBeforeBuy} BR`, 'info');
+      addDebugLog(`  购买后余额: ${parseFloat(currentBrBalance)} BR`, 'info');
+      addDebugLog(`  实际购买: ${actualBrBought} BR`, 'info');
+      addDebugLog(`  预期购买: ${parseFloat(expectedBRAmount)} BR`, 'info');
+      
       // 检查是否被用户停止
       if (shouldStopRef.current) {
         throw new Error('用户停止：循环被中断');
       }
       
+      // 验证是否购买到了足够的BR
+      if (actualBrBought <= 0) {
+        throw new Error(`购买BR失败，实际购买数量: ${actualBrBought}`);
+      }
+      
       setCycleStatus(`第 ${cycleIndex} 次循环：计算卖出USDT数量...`);
-      const expectedUSDTAmount = await getUsdtAmountFromBr(currentBrBalance);
+      // 重要：只计算实际购买到的BR数量能换回多少USDT，而不是使用总余额
+      const expectedUSDTAmount = await getUsdtAmountFromBr(actualBrBought.toFixed(8));
       const minUSDTAmount = (parseFloat(expectedUSDTAmount) * 0.99985).toFixed(8);
       
       // 检查是否被用户停止
@@ -724,21 +801,23 @@ const CycleTrading = ({ account, provider, chainId }) => {
       const usdtBalanceBeforeSell = await getUSDTBalance();
       
       setCycleStatus(`第 ${cycleIndex} 次循环：卖出BR...`);
-      console.log(`第 ${cycleIndex} 次循环卖出参数:`, {
-        brInputAmount: currentBrBalance,
-        minUSDTOutput: minUSDTAmount,
-        expectedUSDTAmount: expectedUSDTAmount,
-        usdtBalanceBeforeSell: usdtBalanceBeforeSell
-      });
+      addDebugLog(`📊 第 ${cycleIndex} 次循环卖出参数:`, 'info');
+      addDebugLog(`  卖出BR数量: ${actualBrBought.toFixed(8)} BR`, 'info');
+      addDebugLog(`  总BR余额: ${currentBrBalance} BR`, 'info');
+      addDebugLog(`  预期USDT输出: ${expectedUSDTAmount} USDT`, 'info');
+      addDebugLog(`  最低USDT输出: ${minUSDTAmount} USDT`, 'info');
+      addDebugLog(`  卖出前USDT余额: ${usdtBalanceBeforeSell} USDT`, 'info');
       
-      console.log(`🔔 准备发起第 ${cycleIndex} 次循环的卖BR交易，即将拉起钱包...`);
+      addDebugLog(`🔔 准备发起第 ${cycleIndex} 次循环的卖BR交易，即将拉起钱包...`, 'info');
+      addDebugLog(`🔥 重要：只卖出本次购买的 ${actualBrBought.toFixed(8)} BR，保留用户原有的BR`, 'warning');
       setCycleStatus(`第 ${cycleIndex} 次循环：准备卖出BR，等待钱包签名...`);
       
       // executeTransaction(isUsdtToBr, usdtAmount, brAmount)
       // BR->USDT: usdtAmount=期望输出, brAmount=输入数量
-      const sellReceipt = await executeTransaction(false, minUSDTAmount, currentBrBalance);
+      // 重要修改：使用 actualBrBought 而不是 currentBrBalance
+      const sellReceipt = await executeTransaction(false, minUSDTAmount, actualBrBought.toFixed(8));
       
-      console.log(`✅ 第 ${cycleIndex} 次循环的卖BR交易已完成，交易hash: ${sellReceipt.transactionHash}`);
+      addDebugLog(`✅ 第 ${cycleIndex} 次循环的卖BR交易已完成，交易hash: ${sellReceipt.transactionHash}`, 'success');
       
       // 等待USDT余额更新
       const expectedUsdtBalanceAfterSell = parseFloat(usdtBalanceBeforeSell) + parseFloat(minUSDTAmount) * 0.8; // 预期的80%作为最小值
@@ -760,8 +839,8 @@ const CycleTrading = ({ account, provider, chainId }) => {
         usdtSpent: usdtSpent.toFixed(6),
         usdtReceived: usdtReceived.toFixed(6),
         usdtDifference: usdtDifference.toFixed(6),
-        brBought: expectedBRAmount,
-        brSold: currentBrBalance,
+        brBought: actualBrBought.toFixed(8), // 使用实际购买的BR数量
+        brSold: actualBrBought.toFixed(8),   // 使用实际卖出的BR数量（与购买数量相同）
         buyTx: buyReceipt.transactionHash,
         sellTx: sellReceipt.transactionHash,
         timestamp: new Date()
@@ -775,6 +854,7 @@ const CycleTrading = ({ account, provider, chainId }) => {
       return cycleRecord;
       
     } catch (error) {
+      addDebugLog(`❌ 第 ${cycleIndex} 次循环失败: ${error.message}`, 'error');
       console.error(`第 ${cycleIndex} 次循环失败:`, error);
       throw error;
     }
@@ -823,6 +903,10 @@ const CycleTrading = ({ account, provider, chainId }) => {
     try {
       const totalCycles = parseInt(cycleCount);
       
+      // 记录开始日志
+      addDebugLog(`🚀 开始循环交易: ${totalCycles} 次循环，每次 ${parseFloat(usdtAmountPerCycle).toFixed(6)} USDT`, 'info');
+      addDebugLog(`💰 总计需要: ${totalUsdtNeeded.toFixed(6)} USDT，当前余额: ${parseFloat(usdtBalance).toFixed(6)} USDT`, 'info');
+      
       for (let i = 1; i <= totalCycles; i++) {
         // 检查是否被用户停止
         if (shouldStopRef.current) {
@@ -854,6 +938,30 @@ const CycleTrading = ({ account, provider, chainId }) => {
           
         } catch (error) {
           console.error(`第 ${i} 次循环失败:`, error);
+          
+          // 检查是否是用户拒绝签名
+          if (isUserRejectedError(error)) {
+            console.log('🚫 用户拒绝签名，退出循环交易');
+            setCycleStatus('用户拒绝签名，循环交易已停止');
+            
+            // 记录失败的循环
+            const failedRecord = {
+              cycle: i,
+              usdtSpent: '0',
+              usdtReceived: '0', 
+              usdtDifference: '0',
+              brBought: '0',
+              brSold: '0',
+              buyTx: '',
+              sellTx: '',
+              error: '用户拒绝签名',
+              timestamp: new Date()
+            };
+            setCycleHistory(prev => [...prev, failedRecord]);
+            
+            // 直接退出循环
+            break;
+          }
           
           // 如果是用户停止，立即退出循环
           if (error.message.includes('用户停止')) {
@@ -887,17 +995,24 @@ const CycleTrading = ({ account, provider, chainId }) => {
       // 检查是否被用户停止
       if (shouldStopRef.current) {
         setCycleStatus('循环交易已被用户停止');
+        addDebugLog('⏹️ 循环交易被用户手动停止', 'warning');
       } else {
         const successfulCycles = cycleHistory.filter(record => !record.error).length;
         const totalAttempted = cycleHistory.length;
         setCycleStatus(`循环交易完成！成功 ${successfulCycles}/${totalAttempted} 次，失败 ${totalAttempted - successfulCycles} 次`);
+        addDebugLog(`🎉 循环交易全部完成！`, 'success');
+        addDebugLog(`📊 统计结果: 成功 ${successfulCycles} 次，失败 ${totalAttempted - successfulCycles} 次`, 'success');
       }
       
     } catch (error) {
       console.error('循环交易失败:', error);
       
-      // 如果是用户停止，不显示错误警告
-      if (error.message.includes('用户停止')) {
+      // 检查是否是用户拒绝签名
+      if (isUserRejectedError(error)) {
+        setCycleStatus('用户拒绝签名，循环交易已停止');
+        // 不显示错误警告，因为这是用户主动选择
+      } else if (error.message.includes('用户停止')) {
+        // 如果是用户停止，不显示错误警告
         setCycleStatus('循环交易已被用户停止');
       } else {
         setCycleStatus(`循环交易失败: ${error.message}`);
@@ -914,6 +1029,7 @@ const CycleTrading = ({ account, provider, chainId }) => {
     shouldStopRef.current = true; // 设置停止标志
     setIsCycling(false); // 立即设置循环状态为false
     setCycleStatus('用户手动停止循环交易，已立即停止');
+    addDebugLog('🛑 用户手动停止循环交易', 'warning');
     console.log('🛑 用户手动停止循环交易');
   };
 
@@ -1097,6 +1213,8 @@ const CycleTrading = ({ account, provider, chainId }) => {
                         <>
                           <span>消耗: {record.usdtSpent} USDT</span>
                           <span>回收: {record.usdtReceived} USDT</span>
+                          <span>购买: {record.brBought} BR</span>
+                          <span>卖出: {record.brSold} BR</span>
                         </>
                       )}
                       <span>时间: {record.timestamp.toLocaleTimeString()}</span>
@@ -1107,6 +1225,45 @@ const CycleTrading = ({ account, provider, chainId }) => {
             </div>
           )}
 
+          {/* 调试日志 */}
+          <div className="debug-logs-section">
+            <div className="debug-logs-header">
+              <h3>🔍 调试日志</h3>
+              <div className="debug-logs-controls">
+                <button
+                  className="toggle-logs-btn"
+                  onClick={() => setShowDebugLogs(!showDebugLogs)}
+                >
+                  {showDebugLogs ? '隐藏日志' : '显示日志'}
+                </button>
+                <button
+                  className="clear-logs-btn"
+                  onClick={clearDebugLogs}
+                  disabled={debugLogs.length === 0}
+                >
+                  清空日志
+                </button>
+              </div>
+            </div>
+            
+            {showDebugLogs && (
+              <div className="debug-logs-content">
+                {debugLogs.length === 0 ? (
+                  <div className="no-logs">暂无日志</div>
+                ) : (
+                  <div className="logs-list">
+                    {debugLogs.map((log) => (
+                      <div key={log.id} className={`log-item log-${log.level}`}>
+                        <span className="log-timestamp">{log.timestamp}</span>
+                        <span className="log-message">{log.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* 注意事项 */}
           <div className="notice-section">
             <h3>⚠️ 注意事项</h3>
@@ -1116,6 +1273,8 @@ const CycleTrading = ({ account, provider, chainId }) => {
               <li>价格波动可能导致亏损</li>
               <li>建议先小额测试后再大额交易</li>
               <li>循环过程中请勿关闭页面</li>
+              <li>💡 移动端可点击"显示日志"查看详细操作日志</li>
+              <li>🔧 遇到问题可查看调试日志进行故障排除</li>
             </ul>
           </div>
         </div>

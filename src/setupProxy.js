@@ -1,4 +1,4 @@
-const { createProxyMiddleware } = require('http-proxy-middleware');
+const { createProxyMiddleware } = require('http-proxy-middleware'); // eslint-disable-line no-unused-vars
 
 module.exports = function(app) {
   // 如果需要代理到其他服务，可以在这里配置

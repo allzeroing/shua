@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
-import TokenConfig from './TokenConfig';
-import TokenSwap from './TokenSwap';
 import FixedTrade from './FixedTrade';
 import CycleTrading from './CycleTrading';
 import './App.css';
@@ -13,7 +11,7 @@ function App() {
   const [balance, setBalance] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
-  const [currentPage, setCurrentPage] = useState('wallet'); // 'wallet', 'config', 'swap'
+  const [currentPage, setCurrentPage] = useState('wallet'); // 'wallet', 'fixed', 'cycle'
 
   // 使用ref来跟踪当前连接状态，避免闭包问题
   const accountRef = useRef('');
@@ -23,57 +21,13 @@ function App() {
     accountRef.current = account;
   }, [account]);
 
-  // 支持的网络配置
-  const supportedNetworks = {
-    '1': {
-      name: 'Ethereum 主网',
-      symbol: 'ETH',
-      rpcUrl: 'https://mainnet.infura.io/v3/YOUR_INFURA_KEY',
-      blockExplorer: 'https://etherscan.io'
-    },
-    '56': {
-      name: 'BSC 主网',
-      symbol: 'BNB',
-      rpcUrl: 'https://bsc-dataseed.binance.org/',
-      blockExplorer: 'https://bscscan.com'
-    },
-    '8453': {
-      name: 'Base 主网',
-      symbol: 'ETH',
-      rpcUrl: 'https://mainnet.base.org',
-      blockExplorer: 'https://basescan.org'
-    },
-    '137': {
-      name: 'Polygon 主网',
-      symbol: 'MATIC',
-      rpcUrl: 'https://polygon-rpc.com/',
-      blockExplorer: 'https://polygonscan.com'
-    },
-    '42161': {
-      name: 'Arbitrum One',
-      symbol: 'ETH',
-      rpcUrl: 'https://arb1.arbitrum.io/rpc',
-      blockExplorer: 'https://arbiscan.io'
-    },
-    '10': {
-      name: 'Optimism',
-      symbol: 'ETH',
-      rpcUrl: 'https://mainnet.optimism.io',
-      blockExplorer: 'https://optimistic.etherscan.io'
-    },
-    // 测试网络
-    '11155111': {
-      name: 'Sepolia 测试网',
-      symbol: 'ETH',
-      rpcUrl: 'https://sepolia.infura.io/v3/YOUR_INFURA_KEY',
-      blockExplorer: 'https://sepolia.etherscan.io'
-    },
-    '97': {
-      name: 'BSC 测试网',
-      symbol: 'tBNB',
-      rpcUrl: 'https://data-seed-prebsc-1-s1.binance.org:8545/',
-      blockExplorer: 'https://testnet.bscscan.com'
-    }
+  // BSC主网配置
+  const BSC_MAINNET = {
+    chainId: '56',
+    name: 'BSC 主网',
+    symbol: 'BNB',
+    rpcUrl: 'https://bsc-dataseed.binance.org/',
+    blockExplorer: 'https://bscscan.com'
   };
 
   // 检查MetaMask是否安装
@@ -138,10 +92,17 @@ function App() {
       
       // 获取网络信息
       const network = await provider.getNetwork();
-      setChainId(network.chainId.toString());
+      const currentChainId = network.chainId.toString();
+      setChainId(currentChainId);
       
-      // 更新余额
-      await updateBalance(provider, accounts[0]);
+      // 检查是否在BSC主网，如果不是则自动切换
+      if (currentChainId !== BSC_MAINNET.chainId) {
+        console.log('当前网络不是BSC主网，正在切换...');
+        await switchToBSC();
+      } else {
+        // 更新余额
+        await updateBalance(provider, accounts[0]);
+      }
       
     } catch (error) {
       console.error('连接钱包失败:', error);
@@ -178,53 +139,68 @@ function App() {
     }
   };
 
-  // 切换网络
-  const switchNetwork = async (targetChainId) => {
+  // 切换到BSC主网
+  const switchToBSC = async () => {
     if (!checkMetaMaskInstalled() || !window.ethereum) {
       alert('请先安装并连接MetaMask钱包！');
-      return;
-    }
-
-    const networkConfig = supportedNetworks[targetChainId];
-    if (!networkConfig) {
-      alert('不支持的网络！');
       return;
     }
 
     try {
       setIsSwitchingNetwork(true);
       
-      // 尝试切换到指定网络
+      // 尝试切换到BSC主网
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: `0x${parseInt(targetChainId).toString(16)}` }]
+        params: [{ chainId: '0x38' }] // BSC主网的十六进制ID
       });
-
-    } catch (switchError) {
-      // 如果网络不存在，尝试添加网络
-      if (switchError.code === 4902) {
+      
+      console.log('成功切换到BSC主网');
+      setChainId(BSC_MAINNET.chainId);
+      
+      // 切换成功后更新余额
+      if (account && provider) {
+        await updateBalance(provider, account);
+      }
+      
+    } catch (error) {
+      console.error('切换到BSC主网失败:', error);
+      
+      // 如果BSC网络不存在，尝试添加
+      if (error.code === 4902) {
         try {
           await window.ethereum.request({
             method: 'wallet_addEthereumChain',
             params: [{
-              chainId: `0x${parseInt(targetChainId).toString(16)}`,
-              chainName: networkConfig.name,
+              chainId: '0x38',
+              chainName: BSC_MAINNET.name,
               nativeCurrency: {
-                name: networkConfig.symbol,
-                symbol: networkConfig.symbol,
+                name: BSC_MAINNET.symbol,
+                symbol: BSC_MAINNET.symbol,
                 decimals: 18
               },
-              rpcUrls: [networkConfig.rpcUrl],
-              blockExplorerUrls: [networkConfig.blockExplorer]
+              rpcUrls: [BSC_MAINNET.rpcUrl],
+              blockExplorerUrls: [BSC_MAINNET.blockExplorer]
             }]
           });
+          
+          console.log('成功添加并切换到BSC主网');
+          setChainId(BSC_MAINNET.chainId);
+          
+          // 切换成功后更新余额
+          if (account && provider) {
+            await updateBalance(provider, account);
+          }
+          
         } catch (addError) {
-          console.error('添加网络失败:', addError);
-          alert('添加网络失败，请手动添加！');
+          console.error('添加BSC网络失败:', addError);
+          alert(`添加BSC网络失败: ${addError.message}`);
         }
+      } else if (error.code === 4001) {
+        console.log('用户拒绝了切换到BSC主网的请求');
+        alert('需要切换到BSC主网才能使用此应用');
       } else {
-        console.error('切换网络失败:', switchError);
-        alert('切换网络失败，请重试！');
+        alert(`切换到BSC主网失败: ${error.message}`);
       }
     } finally {
       setIsSwitchingNetwork(false);
@@ -260,31 +236,44 @@ function App() {
             
             // 获取并更新网络信息
             const network = await provider.getNetwork();
-            setChainId(network.chainId.toString());
+            const currentChainId = network.chainId.toString();
+            setChainId(currentChainId);
+            
+            // 检查是否在BSC主网
+            if (currentChainId !== BSC_MAINNET.chainId) {
+              console.log('账户变化后检测到不在BSC主网');
+              await switchToBSC();
+            }
           } catch (error) {
             console.error('账户变化后重新连接失败:', error);
           }
         }
       };
 
-      // 监听网络变化
-      const handleChainChanged = async (chainId) => {
-        console.log('网络变化:', chainId);
-        const newChainId = parseInt(chainId, 16).toString();
-        setChainId(newChainId);
-        
-        // 重新获取provider和余额
-        if (account) {
-          try {
-            const provider = new ethers.BrowserProvider(window.ethereum);
-            setProvider(provider);
-            await updateBalance(provider, account);
-          } catch (error) {
-            console.error('网络切换后更新失败:', error);
-            // 不再自动重新连接，避免触发连接弹窗
+              // 监听网络变化
+        const handleChainChanged = async (chainId) => {
+          console.log('网络变化:', chainId);
+          const newChainId = parseInt(chainId, 16).toString();
+          setChainId(newChainId);
+          
+          // 检查是否切换到了BSC主网
+          if (newChainId !== BSC_MAINNET.chainId) {
+            console.log('检测到网络不是BSC主网，将自动切换');
+            alert('检测到网络变化，需要使用BSC主网才能正常使用此应用');
+            await switchToBSC();
+          } else {
+            // 如果是BSC主网，更新余额
+            if (account) {
+              try {
+                const provider = new ethers.BrowserProvider(window.ethereum);
+                setProvider(provider);
+                await updateBalance(provider, account);
+              } catch (error) {
+                console.error('网络切换后更新失败:', error);
+              }
+            }
           }
-        }
-      };
+        };
 
       // 监听钱包断开连接
       const handleDisconnect = (error) => {
@@ -311,10 +300,17 @@ function App() {
             
             // 获取网络信息
             const network = await provider.getNetwork();
-            setChainId(network.chainId.toString());
+            const currentChainId = network.chainId.toString();
+            setChainId(currentChainId);
             
-            // 更新余额
-            await updateBalance(provider, accounts[0]);
+            // 检查是否在BSC主网
+            if (currentChainId !== BSC_MAINNET.chainId) {
+              console.log('初始化时检测到不在BSC主网，准备切换');
+              await switchToBSC();
+            } else {
+              // 更新余额
+              await updateBalance(provider, accounts[0]);
+            }
             
             console.log('钱包状态初始化完成');
           }
@@ -353,12 +349,15 @@ function App() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 获取网络信息
+  // 获取当前网络信息（只支持BSC主网）
   const getCurrentNetwork = () => {
-    return supportedNetworks[chainId] || { 
-      name: `未知网络 (${chainId})`, 
-      symbol: 'ETH',
-      blockExplorer: '#'
+    if (chainId === BSC_MAINNET.chainId) {
+      return BSC_MAINNET;
+    }
+    return { 
+      name: `不支持的网络 (${chainId})`, 
+      symbol: 'BNB',
+      blockExplorer: BSC_MAINNET.blockExplorer
     };
   };
 
@@ -369,10 +368,10 @@ function App() {
 
   // 获取网络状态颜色
   const getNetworkStatusColor = () => {
-    if (supportedNetworks[chainId]) {
-      return '#4caf50'; // 绿色 - 支持的网络
+    if (chainId === BSC_MAINNET.chainId) {
+      return '#4caf50'; // 绿色 - BSC主网
     }
-    return '#ff9800'; // 橙色 - 不支持的网络
+    return '#ff5722'; // 红色 - 不支持的网络
   };
 
   // 渲染导航菜单
@@ -387,20 +386,6 @@ function App() {
           onClick={() => setCurrentPage('wallet')}
         >
           🔗 钱包连接
-        </button>
-        <button 
-          className={`nav-button ${currentPage === 'config' ? 'active' : ''}`}
-          onClick={() => setCurrentPage('config')}
-        >
-          🔧 币种配置
-        </button>
-        <button 
-          className={`nav-button ${currentPage === 'swap' ? 'active' : ''}`}
-          onClick={() => setCurrentPage('swap')}
-          disabled={!account}
-          title={!account ? '请先连接钱包' : ''}
-        >
-          🔄 币种兑换
         </button>
         <button 
           className={`nav-button ${currentPage === 'fixed' ? 'active' : ''}`}
@@ -449,7 +434,7 @@ function App() {
       ) : !account ? (
         <div className="wallet-section">
           <h2>🔗 连接您的钱包</h2>
-          <p>连接您的以太坊钱包开始使用</p>
+          <p>连接您的MetaMask钱包到BSC主网开始使用</p>
           <button 
             onClick={connectWallet} 
             disabled={isConnecting}
@@ -483,26 +468,20 @@ function App() {
             </div>
           </div>
           
-          {/* 网络切换区域 */}
-          <div className="network-switch-section">
-            <h3>🔄 切换网络</h3>
-            <div className="network-grid">
-              {Object.entries(supportedNetworks).map(([id, network]) => (
-                <button
-                  key={id}
-                  onClick={() => switchNetwork(id)}
-                  disabled={isSwitchingNetwork || chainId === id}
-                  className={`network-button ${chainId === id ? 'active' : ''}`}
-                >
-                  {network.name}
-                  {chainId === id && <span className="current-badge">当前</span>}
-                </button>
-              ))}
+          {/* BSC主网状态显示 */}
+          {chainId !== BSC_MAINNET.chainId && (
+            <div className="network-warning">
+              <h3>⚠️ 网络提示</h3>
+              <p>此应用仅支持BSC主网，请切换到BSC主网以正常使用所有功能。</p>
+              <button 
+                onClick={switchToBSC}
+                disabled={isSwitchingNetwork}
+                className="switch-network-button"
+              >
+                {isSwitchingNetwork ? '切换中...' : '切换到BSC主网'}
+              </button>
             </div>
-            {isSwitchingNetwork && (
-              <p className="switching-text">正在切换网络...</p>
-            )}
-          </div>
+          )}
           
           <button 
             onClick={disconnectWallet}
@@ -516,29 +495,20 @@ function App() {
       <div className="features-section">
         <h3>🚀 支持的功能</h3>
         <ul>
-          <li>✅ 多链钱包连接 (ETH/BSC/Base/Polygon等)</li>
-          <li>✅ 一键网络切换</li>
+          <li>✅ BSC主网钱包连接</li>
+          <li>✅ 自动网络检测和切换</li>
           <li>✅ 实时余额显示</li>
-          <li>✅ 币种配置管理</li>
-          <li>✅ 币种兑换界面</li>
-          <li>✅ 固定交易功能</li>
-          <li>✅ 循环交易功能</li>
-          <li>🔄 智能合约交互 (即将推出)</li>
+          <li>✅ USDT/BR固定交易功能</li>
+          <li>✅ 自动循环交易功能</li>
+          <li>✅ 智能价格计算</li>
+          <li>✅ PancakeSwap V3 集成</li>
+          <li>✅ 交易历史记录</li>
         </ul>
       </div>
     </div>
   );
 
-  // 渲染币种兑换页面
-  const renderSwapPage = () => (
-    <div className="page-content">
-      <TokenSwap 
-        account={account}
-        provider={provider}
-        chainId={chainId}
-      />
-    </div>
-  );
+
 
   // 渲染固定交易页面
   const renderFixedTradePage = () => (
@@ -567,8 +537,6 @@ function App() {
       {renderNavigation()}
       <main className="main-content">
         {currentPage === 'wallet' && renderWalletPage()}
-        {currentPage === 'config' && <TokenConfig />}
-        {currentPage === 'swap' && renderSwapPage()}
         {currentPage === 'fixed' && renderFixedTradePage()}
         {currentPage === 'cycle' && renderCycleTradingPage()}
       </main>
