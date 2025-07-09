@@ -1,0 +1,477 @@
+.fixed-trade {
+  padding: 20px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.fixed-trade h2 {
+  text-align: center;
+  color: #333;
+  margin-bottom: 10px;
+  font-size: 2rem;
+}
+
+.trade-description {
+  text-align: center;
+  color: #666;
+  margin-bottom: 30px;
+  font-size: 1.1rem;
+}
+
+/* 未连接钱包状态 */
+.no-wallet {
+  text-align: center;
+  padding: 40px 20px;
+  background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+  border-radius: 15px;
+  margin: 20px 0;
+}
+
+.no-wallet h3 {
+  color: #d63384;
+  margin-bottom: 10px;
+}
+
+.no-wallet p {
+  color: #6f42c1;
+  font-size: 1.1rem;
+}
+
+/* 交易按钮容器 */
+.trade-buttons-container {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.trade-pair-section {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 20px;
+  padding: 30px;
+  color: white;
+  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+}
+
+.trade-pair-section h3 {
+  text-align: center;
+  margin-bottom: 15px;
+  font-size: 1.5rem;
+}
+
+.contract-info {
+  text-align: center;
+  font-size: 0.9rem;
+  opacity: 0.8;
+  margin-bottom: 25px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 8px 15px;
+  border-radius: 20px;
+  backdrop-filter: blur(10px);
+}
+
+/* USDT数量输入区域 */
+.amount-input-section {
+  margin-bottom: 25px;
+  text-align: center;
+}
+
+.amount-input-section label {
+  display: block;
+  margin-bottom: 10px;
+  font-weight: bold;
+  font-size: 1.1rem;
+  color: white;
+}
+
+.amount-input {
+  width: 100%;
+  max-width: 300px;
+  padding: 12px 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 25px;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  font-size: 1.1rem;
+  text-align: center;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+}
+
+.amount-input:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+}
+
+.amount-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.amount-input::placeholder {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.amount-input.insufficient-balance {
+  border-color: #ff4444;
+  background: rgba(255, 68, 68, 0.1);
+  box-shadow: 0 0 20px rgba(255, 68, 68, 0.3);
+}
+
+.insufficient-balance-hint {
+  display: block;
+  margin-top: 8px;
+  font-size: 0.9rem;
+  color: #ff6b6b;
+  font-weight: bold;
+  text-align: center;
+  background: rgba(255, 68, 68, 0.1);
+  padding: 5px 10px;
+  border-radius: 15px;
+  border: 1px solid rgba(255, 68, 68, 0.3);
+}
+
+.input-hint {
+  display: block;
+  margin-top: 8px;
+  font-size: 0.9rem;
+  opacity: 0.8;
+  color: white;
+}
+
+/* BR余额显示 */
+.balance-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 8px 15px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  backdrop-filter: blur(10px);
+}
+
+.balance-label {
+  font-size: 0.9rem;
+  opacity: 0.8;
+  color: white;
+}
+
+.balance-value {
+  font-size: 1rem;
+  font-weight: bold;
+  color: #ffeb3b;
+}
+
+.refresh-balance-button {
+  background: linear-gradient(135deg, #2196f3 0%, #21cbf3 100%);
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  color: white;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 3px;
+}
+
+.refresh-balance-button:hover {
+  transform: translateY(-1px) rotate(180deg);
+  box-shadow: 0 5px 15px rgba(33, 150, 243, 0.4);
+}
+
+.refresh-balance-button:active {
+  transform: translateY(0) rotate(360deg);
+}
+
+.refresh-balance-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.use-max-button {
+  background: linear-gradient(135deg, #4caf50 0%, #8bc34a 100%);
+  border: none;
+  border-radius: 15px;
+  padding: 5px 12px;
+  color: white;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.use-max-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
+}
+
+.use-max-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.balance-display {
+  font-size: 0.9rem;
+  opacity: 0.8;
+  color: white;
+  margin-top: 5px;
+}
+
+.balance-update-time {
+  font-size: 0.8rem;
+  opacity: 0.7;
+  color: rgba(255, 255, 255, 0.8);
+  text-align: center;
+  margin-top: 5px;
+  font-style: italic;
+}
+
+.price-info {
+  font-size: 0.8rem;
+  opacity: 0.9;
+  color: #ffeb3b;
+  margin-top: 3px;
+  font-weight: bold;
+}
+
+/* 交易按钮布局 */
+.trade-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 768px) {
+  .trade-buttons {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+}
+
+/* 交易按钮样式 */
+.trade-button {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  border: none;
+  border-radius: 15px;
+  padding: 25px 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  min-height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.trade-button:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 15px 35px rgba(79, 172, 254, 0.4);
+}
+
+.trade-button:active {
+  transform: translateY(-1px);
+}
+
+.trade-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* BR->USDT 按钮特殊颜色 */
+.trade-button.br-to-usdt {
+  background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+}
+
+.trade-button.br-to-usdt:hover {
+  box-shadow: 0 15px 35px rgba(250, 112, 154, 0.4);
+}
+
+/* 交易中状态 */
+.trade-button.trading {
+  background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+  animation: pulse 2s infinite;
+}
+
+/* 价格查询中状态 */
+.trade-button:disabled.price-loading {
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+  animation: priceQuery 1.5s infinite;
+}
+
+@keyframes priceQuery {
+  0% {
+    box-shadow: 0 0 0 0 rgba(33, 150, 243, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(33, 150, 243, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(33, 150, 243, 0);
+  }
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 236, 210, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(255, 236, 210, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 236, 210, 0);
+  }
+}
+
+/* 按钮内容 */
+.button-content {
+  text-align: center;
+  color: white;
+  width: 100%;
+}
+
+.trade-direction {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 15px;
+  font-size: 1.2rem;
+  font-weight: bold;
+}
+
+.from-token, .to-token {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 8px 12px;
+  border-radius: 20px;
+  backdrop-filter: blur(10px);
+}
+
+.arrow {
+  margin: 0 15px;
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+.button-text {
+  font-size: 1.3rem;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.trade-info {
+  font-size: 0.9rem;
+  opacity: 0.9;
+  line-height: 1.4;
+}
+
+/* 交易信息部分 */
+.trade-info-section {
+  background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+  border-radius: 15px;
+  padding: 25px;
+  color: #333;
+}
+
+.trade-info-section h3 {
+  margin-bottom: 20px;
+  color: #2d3748;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 15px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+}
+
+.info-item .label {
+  font-weight: 600;
+  color: #4a5568;
+}
+
+.info-item .value {
+  font-weight: 500;
+  color: #2d3748;
+}
+
+/* 注意事项部分 */
+.notice-section {
+  background: linear-gradient(135deg, #ffeaa7 0%, #fab1a0 100%);
+  border-radius: 15px;
+  padding: 25px;
+  color: #2d3748;
+}
+
+.notice-section h3 {
+  margin-bottom: 15px;
+  color: #e17055;
+}
+
+.notice-section ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.notice-section li {
+  padding: 8px 0;
+  position: relative;
+  padding-left: 25px;
+}
+
+.notice-section li::before {
+  content: "⚠️";
+  position: absolute;
+  left: 0;
+  top: 8px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .fixed-trade {
+    padding: 15px;
+  }
+  
+  .fixed-trade h2 {
+    font-size: 1.5rem;
+  }
+  
+  .trade-pair-section {
+    padding: 20px;
+  }
+  
+  .trade-button {
+    min-height: 120px;
+    padding: 20px 15px;
+  }
+  
+  .button-text {
+    font-size: 1.1rem;
+  }
+  
+  .trade-direction {
+    font-size: 1rem;
+  }
+  
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+} 

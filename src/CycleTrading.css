@@ -1,0 +1,564 @@
+.cycle-trading {
+  padding: 20px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.cycle-trading h2 {
+  text-align: center;
+  color: #333;
+  margin-bottom: 10px;
+  font-size: 2rem;
+}
+
+.trading-description {
+  text-align: center;
+  color: #666;
+  margin-bottom: 30px;
+  font-size: 1.1rem;
+}
+
+/* 未连接钱包状态 */
+.no-wallet {
+  text-align: center;
+  padding: 40px 20px;
+  background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+  border-radius: 15px;
+  margin: 20px 0;
+}
+
+.no-wallet h3 {
+  color: #d63384;
+  margin-bottom: 10px;
+}
+
+.no-wallet p {
+  color: #6f42c1;
+  font-size: 1.1rem;
+}
+
+/* 循环交易容器 */
+.cycle-trading-container {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+/* 交易参数设置 */
+.trading-params {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 20px;
+  padding: 30px;
+  color: white;
+  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.trading-params h3 {
+  text-align: center;
+  margin-bottom: 25px;
+  font-size: 1.5rem;
+}
+
+.param-input {
+  margin-bottom: 25px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.param-input label {
+  display: block;
+  margin-bottom: 10px;
+  font-weight: bold;
+  color: white;
+  text-align: center;
+  font-size: 1.1rem;
+}
+
+.param-input-field {
+  width: 220px;
+  padding: 12px 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 25px;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  font-size: 1.1rem;
+  text-align: center;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+  margin: 0 auto;
+  display: block;
+}
+
+.param-input-field:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+}
+
+.param-input-field:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.param-input-field::placeholder {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* 余额显示 */
+.balance-display {
+  margin-top: 25px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 15px;
+  backdrop-filter: blur(10px);
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.balance-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.balance-header h4 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: white;
+}
+
+.refresh-balance-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.2rem;
+  color: white;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(5px);
+}
+
+.refresh-balance-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: rotate(180deg);
+}
+
+.refresh-balance-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.balance-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.balance-item:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.balance-item span:first-child {
+  font-size: 0.95rem;
+  opacity: 0.8;
+  color: white;
+}
+
+.balance-value {
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: #ffeb3b;
+}
+
+.balance-update-time {
+  text-align: center;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 10px;
+  font-style: italic;
+}
+
+/* 交易控制 */
+.trading-controls {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.start-cycle-btn, .stop-cycle-btn {
+  padding: 15px 30px;
+  border: none;
+  border-radius: 25px;
+  font-size: 1.1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 180px;
+}
+
+.start-cycle-btn {
+  background: linear-gradient(135deg, #4caf50 0%, #8bc34a 100%);
+  color: white;
+}
+
+.start-cycle-btn:hover:not(.disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(76, 175, 80, 0.4);
+}
+
+.start-cycle-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.stop-cycle-btn {
+  background: linear-gradient(135deg, #f44336 0%, #ff9800 100%);
+  color: white;
+}
+
+.stop-cycle-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(244, 67, 54, 0.4);
+}
+
+/* 循环状态 */
+.cycle-status {
+  background: linear-gradient(135deg, #2196f3 0%, #21cbf3 100%);
+  border-radius: 20px;
+  padding: 25px;
+  color: white;
+  box-shadow: 0 10px 30px rgba(33, 150, 243, 0.3);
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.cycle-status h3 {
+  text-align: center;
+  margin-bottom: 20px;
+  font-size: 1.4rem;
+}
+
+.status-info {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+.status-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+}
+
+.status-item span:first-child {
+  font-weight: bold;
+  opacity: 0.9;
+}
+
+.status-item span:last-child {
+  font-weight: bold;
+}
+
+.profit-positive {
+  color: #4caf50;
+}
+
+.profit-negative {
+  color: #ffc107;
+  font-weight: bold;
+}
+
+/* 循环历史 */
+.cycle-history {
+  background: linear-gradient(135deg, #9c27b0 0%, #e91e63 100%);
+  border-radius: 20px;
+  padding: 25px;
+  color: white;
+  box-shadow: 0 10px 30px rgba(156, 39, 176, 0.3);
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.cycle-history h3 {
+  text-align: center;
+  margin-bottom: 20px;
+  font-size: 1.4rem;
+}
+
+/* 循环总计统计 */
+.cycle-summary {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 15px;
+  padding: 20px;
+  margin-bottom: 20px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.cycle-summary h4 {
+  text-align: center;
+  margin-bottom: 15px;
+  font-size: 1.2rem;
+  color: white;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.summary-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  backdrop-filter: blur(5px);
+}
+
+.summary-item span:first-child {
+  font-size: 0.9rem;
+  opacity: 0.9;
+  color: white;
+}
+
+.summary-value {
+  font-weight: bold;
+  font-size: 0.95rem;
+}
+
+.summary-value.consumed {
+  color: #ffeb3b;
+}
+
+.summary-value.received {
+  color: #4caf50;
+}
+
+.history-list {
+  max-height: 350px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.history-item {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 15px;
+  backdrop-filter: blur(10px);
+}
+
+.history-item-failed {
+  background: rgba(244, 67, 54, 0.2);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+.error-text {
+  color: #ff6b6b;
+  font-weight: bold;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  font-weight: bold;
+}
+
+.history-details {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+/* 注意事项 */
+.notice-section {
+  background: linear-gradient(135deg, #ff9800 0%, #ff5722 100%);
+  border-radius: 20px;
+  padding: 25px;
+  color: white;
+  box-shadow: 0 10px 30px rgba(255, 152, 0, 0.3);
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.notice-section h3 {
+  text-align: center;
+  margin-bottom: 20px;
+  font-size: 1.4rem;
+}
+
+.notice-section ul {
+  list-style: none;
+  padding: 0;
+}
+
+.notice-section li {
+  margin-bottom: 10px;
+  padding: 8px 0;
+  position: relative;
+  padding-left: 25px;
+}
+
+.notice-section li::before {
+  content: "⚠️";
+  position: absolute;
+  left: 0;
+  top: 8px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .cycle-trading {
+    padding: 15px;
+  }
+  
+  .cycle-trading h2 {
+    font-size: 1.6rem;
+  }
+  
+  .trading-params {
+    padding: 20px;
+    max-width: 100%;
+  }
+  
+  .param-input-field {
+    width: 200px;
+  }
+  
+  .trading-controls {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .start-cycle-btn, .stop-cycle-btn {
+    width: 100%;
+    max-width: 300px;
+  }
+  
+  .balance-display {
+    max-width: 350px;
+    padding: 15px;
+  }
+
+  .balance-header {
+    margin-bottom: 12px;
+  }
+
+  .balance-header h4 {
+    font-size: 1rem;
+  }
+
+  .refresh-balance-btn {
+    width: 35px;
+    height: 35px;
+    font-size: 1.1rem;
+  }
+
+  .balance-item {
+    padding: 6px 0;
+    margin-bottom: 8px;
+  }
+
+  .balance-item span:first-child {
+    font-size: 0.9rem;
+  }
+
+  .balance-value {
+    font-size: 1rem;
+  }
+
+  .balance-update-time {
+    font-size: 0.75rem;
+    margin-top: 8px;
+  }
+  
+  .status-info {
+    grid-template-columns: 1fr;
+  }
+  
+  .history-details {
+    flex-direction: column;
+    gap: 5px;
+  }
+  
+  .cycle-summary {
+    padding: 15px;
+    margin-bottom: 15px;
+  }
+  
+  .cycle-summary h4 {
+    font-size: 1.1rem;
+    margin-bottom: 12px;
+  }
+  
+  .summary-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  
+  .summary-item {
+    padding: 6px 10px;
+  }
+  
+  .summary-item span:first-child {
+    font-size: 0.85rem;
+  }
+  
+  .summary-value {
+    font-size: 0.9rem;
+  }
+}
+
+/* 超小屏幕优化 */
+@media (max-width: 480px) {
+  .param-input-field {
+    width: 180px;
+    padding: 10px 16px;
+    font-size: 1rem;
+  }
+  
+  .trading-params {
+    padding: 15px;
+  }
+  
+  .param-input {
+    margin-bottom: 20px;
+  }
+  
+  .param-input label {
+    font-size: 1rem;
+    margin-bottom: 8px;
+  }
+} 
