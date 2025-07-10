@@ -59,6 +59,9 @@ const CycleTrading = ({ account, provider, chainId }) => {
 
   // 显示错误弹窗
   const showErrorModal = (title, message, includeRecentLogs = true) => {
+    console.log('🚨 showErrorModal 被调用:', { title, message, includeRecentLogs });
+    console.log('当前debugLogs长度:', debugLogs.length);
+    
     let recentLogs = [];
     if (includeRecentLogs) {
       // 获取最近的10条日志，优先显示错误和警告
@@ -66,17 +69,22 @@ const CycleTrading = ({ account, provider, chainId }) => {
         .slice(-20) // 获取最近20条
         .filter(log => log.level === 'error' || log.level === 'warning' || log.level === 'info')
         .slice(-10); // 只取最近10条
+      console.log('筛选出的最近日志:', recentLogs);
     }
     
-    setErrorModal({
+    const modalData = {
       show: true,
       title,
       message,
       logs: recentLogs
-    });
+    };
+    
+    console.log('设置错误弹窗数据:', modalData);
+    setErrorModal(modalData);
     
     // 同时记录到调试日志
     addDebugLog(`💥 弹窗错误: ${title} - ${message}`, 'error');
+    console.log('✅ 错误弹窗应该已经显示');
   };
 
   // 关闭错误弹窗
@@ -906,7 +914,17 @@ const CycleTrading = ({ account, provider, chainId }) => {
 
   // 开始循环交易
   const startCycleTrading = async () => {
+    // 添加调试日志 - 函数开始
+    console.log('🚀 startCycleTrading 函数开始执行');
+    addDebugLog('🚀 用户点击开始循环交易按钮', 'info');
+    
+    // 调试：检查钱包连接状态
+    console.log('钱包连接状态检查:', { account, provider: !!provider });
+    addDebugLog(`钱包连接状态: account=${account}, provider=${!!provider}`, 'info');
+    
     if (!account || !provider) {
+      console.log('❌ 钱包未连接，显示错误弹窗');
+      addDebugLog('❌ 钱包未连接，显示错误弹窗', 'error');
       showErrorModal(
         '钱包未连接',
         '请先连接钱包后再进行循环交易：\n\n1. 点击页面顶部的"连接钱包"按钮\n2. 选择您的钱包类型\n3. 确认连接后返回此页面',
@@ -915,7 +933,13 @@ const CycleTrading = ({ account, provider, chainId }) => {
       return;
     }
     
+    // 调试：检查循环次数参数
+    console.log('循环次数参数检查:', { cycleCount, parsed: parseInt(cycleCount) });
+    addDebugLog(`循环次数参数: ${cycleCount}, 解析后: ${parseInt(cycleCount)}`, 'info');
+    
     if (!cycleCount || parseInt(cycleCount) <= 0) {
+      console.log('❌ 循环次数参数无效');
+      addDebugLog('❌ 循环次数参数无效', 'error');
       showErrorModal(
         '参数错误',
         '循环次数设置无效：\n\n请输入1-100之间的整数\n例如：5（表示循环5次）',
@@ -924,7 +948,13 @@ const CycleTrading = ({ account, provider, chainId }) => {
       return;
     }
     
+    // 调试：检查USDT数量参数
+    console.log('USDT数量参数检查:', { usdtAmountPerCycle, parsed: parseFloat(usdtAmountPerCycle) });
+    addDebugLog(`USDT数量参数: ${usdtAmountPerCycle}, 解析后: ${parseFloat(usdtAmountPerCycle)}`, 'info');
+    
     if (!usdtAmountPerCycle || parseFloat(usdtAmountPerCycle) <= 0) {
+      console.log('❌ USDT数量参数无效');
+      addDebugLog('❌ USDT数量参数无效', 'error');
       showErrorModal(
         '参数错误',
         'USDT数量设置无效：\n\n请输入大于0的数字\n例如：10（表示每次使用10个USDT）\n\n建议：首次使用建议小额测试',
@@ -933,9 +963,19 @@ const CycleTrading = ({ account, provider, chainId }) => {
       return;
     }
     
-    // 检查总USDT余额是否足够
+    // 调试：检查总USDT余额是否足够
     const totalUsdtNeeded = parseFloat(usdtAmountPerCycle) * parseInt(cycleCount);
+    console.log('余额检查:', { 
+      usdtBalance, 
+      totalUsdtNeeded, 
+      currentBalance: parseFloat(usdtBalance),
+      sufficient: parseFloat(usdtBalance) >= totalUsdtNeeded 
+    });
+    addDebugLog(`余额检查: 当前${parseFloat(usdtBalance).toFixed(6)} USDT, 需要${totalUsdtNeeded.toFixed(6)} USDT`, 'info');
+    
     if (parseFloat(usdtBalance) < totalUsdtNeeded) {
+      console.log('❌ USDT余额不足');
+      addDebugLog('❌ USDT余额不足', 'error');
       showErrorModal(
         'USDT余额不足',
         `无法开始循环交易，余额不足：\n\n需要: ${totalUsdtNeeded.toFixed(6)} USDT\n当前: ${parseFloat(usdtBalance).toFixed(6)} USDT\n缺少: ${(totalUsdtNeeded - parseFloat(usdtBalance)).toFixed(6)} USDT\n\n请充值USDT后再试`,
@@ -951,17 +991,37 @@ const CycleTrading = ({ account, provider, chainId }) => {
       `当前余额: ${parseFloat(usdtBalance).toFixed(6)} USDT\n` +
       `是否确认开始？`;
     
-    if (!window.confirm(confirmMessage)) {
+    console.log('🔔 即将显示确认窗口');
+    console.log('确认消息:', confirmMessage);
+    addDebugLog('🔔 显示确认窗口', 'info');
+    
+    const userConfirmed = window.confirm(confirmMessage);
+    console.log('用户确认结果:', userConfirmed);
+    addDebugLog(`用户确认结果: ${userConfirmed}`, userConfirmed ? 'success' : 'warning');
+    
+    if (!userConfirmed) {
+      console.log('❌ 用户取消了循环交易');
+      addDebugLog('❌ 用户取消了循环交易', 'warning');
       return;
     }
+    
+    console.log('✅ 用户确认开始循环交易，准备启动...');
+    addDebugLog('✅ 用户确认开始循环交易，准备启动...', 'success');
+    
+    console.log('🚀 开始设置循环交易状态...');
+    addDebugLog('🚀 开始设置循环交易状态...', 'info');
     
     setIsCycling(true);
     setCurrentCycle(0);
     setCycleHistory([]);
     shouldStopRef.current = false; // 重置停止标志
     
+    console.log('✅ 循环交易状态已设置，进入主循环逻辑...');
+    addDebugLog('✅ 循环交易状态已设置，进入主循环逻辑...', 'success');
+    
     try {
       const totalCycles = parseInt(cycleCount);
+      console.log('开始执行循环逻辑，总循环次数:', totalCycles);
       
       // 记录开始日志
       addDebugLog(`🚀 开始循环交易: ${totalCycles} 次循环，每次 ${parseFloat(usdtAmountPerCycle).toFixed(6)} USDT`, 'info');
