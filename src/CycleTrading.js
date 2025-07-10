@@ -16,6 +16,7 @@ const CycleTrading = ({ account, provider, chainId }) => {
   const [isLoadingBalance, setIsLoadingBalance] = useState(false); // 余额加载状态
   const [debugLogs, setDebugLogs] = useState([]); // 调试日志
   const [showDebugLogs, setShowDebugLogs] = useState(false); // 是否显示调试日志
+  const [errorModal, setErrorModal] = useState({ show: false, title: '', message: '', logs: [] }); // 错误弹窗
   const shouldStopRef = useRef(false); // 用于控制是否停止循环
 
   // 合约地址
@@ -54,6 +55,33 @@ const CycleTrading = ({ account, provider, chainId }) => {
   // 清空日志
   const clearDebugLogs = () => {
     setDebugLogs([]);
+  };
+
+  // 显示错误弹窗
+  const showErrorModal = (title, message, includeRecentLogs = true) => {
+    let recentLogs = [];
+    if (includeRecentLogs) {
+      // 获取最近的10条日志，优先显示错误和警告
+      recentLogs = debugLogs
+        .slice(-20) // 获取最近20条
+        .filter(log => log.level === 'error' || log.level === 'warning' || log.level === 'info')
+        .slice(-10); // 只取最近10条
+    }
+    
+    setErrorModal({
+      show: true,
+      title,
+      message,
+      logs: recentLogs
+    });
+    
+    // 同时记录到调试日志
+    addDebugLog(`💥 弹窗错误: ${title} - ${message}`, 'error');
+  };
+
+  // 关闭错误弹窗
+  const closeErrorModal = () => {
+    setErrorModal({ show: false, title: '', message: '', logs: [] });
   };
 
   // 自动获取代币余额
@@ -784,6 +812,12 @@ const CycleTrading = ({ account, provider, chainId }) => {
       
       // 验证是否购买到了足够的BR
       if (actualBrBought <= 0) {
+        addDebugLog(`❌ 购买BR失败，实际购买数量: ${actualBrBought}`, 'error');
+        showErrorModal(
+          '购买BR失败',
+          `第 ${cycleIndex} 次循环购买BR失败：\n\n实际购买数量: ${actualBrBought} BR\n预期购买数量: ${parseFloat(expectedBRAmount)} BR\n\n可能原因：\n1. 交易滑点过大\n2. 流动性不足\n3. 网络拥堵导致交易失败\n\n建议：减少交易数量或稍后重试`,
+          true
+        );
         throw new Error(`购买BR失败，实际购买数量: ${actualBrBought}`);
       }
       
@@ -856,6 +890,16 @@ const CycleTrading = ({ account, provider, chainId }) => {
     } catch (error) {
       addDebugLog(`❌ 第 ${cycleIndex} 次循环失败: ${error.message}`, 'error');
       console.error(`第 ${cycleIndex} 次循环失败:`, error);
+      
+      // 如果是关键错误，显示弹窗
+      if (!isUserRejectedError(error) && !error.message.includes('用户停止')) {
+        showErrorModal(
+          `第 ${cycleIndex} 次循环失败`,
+          `错误详情：${error.message}\n\n建议：请检查网络连接、Gas费用设置或代币余额是否充足`,
+          true
+        );
+      }
+      
       throw error;
     }
   };
@@ -863,24 +907,40 @@ const CycleTrading = ({ account, provider, chainId }) => {
   // 开始循环交易
   const startCycleTrading = async () => {
     if (!account || !provider) {
-      alert('请先连接钱包！');
+      showErrorModal(
+        '钱包未连接',
+        '请先连接钱包后再进行循环交易：\n\n1. 点击页面顶部的"连接钱包"按钮\n2. 选择您的钱包类型\n3. 确认连接后返回此页面',
+        false
+      );
       return;
     }
     
     if (!cycleCount || parseInt(cycleCount) <= 0) {
-      alert('请输入有效的循环次数！');
+      showErrorModal(
+        '参数错误',
+        '循环次数设置无效：\n\n请输入1-100之间的整数\n例如：5（表示循环5次）',
+        false
+      );
       return;
     }
     
     if (!usdtAmountPerCycle || parseFloat(usdtAmountPerCycle) <= 0) {
-      alert('请输入有效的USDT数量！');
+      showErrorModal(
+        '参数错误',
+        'USDT数量设置无效：\n\n请输入大于0的数字\n例如：10（表示每次使用10个USDT）\n\n建议：首次使用建议小额测试',
+        false
+      );
       return;
     }
     
     // 检查总USDT余额是否足够
     const totalUsdtNeeded = parseFloat(usdtAmountPerCycle) * parseInt(cycleCount);
     if (parseFloat(usdtBalance) < totalUsdtNeeded) {
-      alert(`USDT余额不足！\n需要: ${totalUsdtNeeded.toFixed(6)} USDT\n当前: ${parseFloat(usdtBalance).toFixed(6)} USDT`);
+      showErrorModal(
+        'USDT余额不足',
+        `无法开始循环交易，余额不足：\n\n需要: ${totalUsdtNeeded.toFixed(6)} USDT\n当前: ${parseFloat(usdtBalance).toFixed(6)} USDT\n缺少: ${(totalUsdtNeeded - parseFloat(usdtBalance)).toFixed(6)} USDT\n\n请充值USDT后再试`,
+        false
+      );
       return;
     }
     
@@ -1016,7 +1076,12 @@ const CycleTrading = ({ account, provider, chainId }) => {
         setCycleStatus('循环交易已被用户停止');
       } else {
         setCycleStatus(`循环交易失败: ${error.message}`);
-        alert(`循环交易失败: ${error.message}`);
+        // 使用新的错误弹窗替代alert
+        showErrorModal(
+          '循环交易失败',
+          `循环交易过程中发生错误：\n${error.message}\n\n建议：\n1. 检查网络连接是否正常\n2. 确认钱包余额是否充足\n3. 查看调试日志了解详细信息`,
+          true
+        );
       }
     } finally {
       setIsCycling(false);
@@ -1276,6 +1341,50 @@ const CycleTrading = ({ account, provider, chainId }) => {
               <li>💡 移动端可点击"显示日志"查看详细操作日志</li>
               <li>🔧 遇到问题可查看调试日志进行故障排除</li>
             </ul>
+          </div>
+        </div>
+      )}
+
+      {/* 错误弹窗 */}
+      {errorModal.show && (
+        <div className="error-modal-overlay" onClick={closeErrorModal}>
+          <div className="error-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="error-modal-header">
+              <h3>⚠️ {errorModal.title}</h3>
+              <button className="error-modal-close" onClick={closeErrorModal}>×</button>
+            </div>
+            
+            <div className="error-modal-body">
+              <div className="error-message">
+                {errorModal.message.split('\n').map((line, index) => (
+                  <div key={index}>{line}</div>
+                ))}
+              </div>
+              
+              {errorModal.logs.length > 0 && (
+                <div className="error-logs-section">
+                  <h4>📋 相关日志：</h4>
+                  <div className="error-logs-list">
+                    {errorModal.logs.map((log) => (
+                      <div key={log.id} className={`error-log-item error-log-${log.level}`}>
+                        <span className="error-log-timestamp">{log.timestamp}</span>
+                        <span className="error-log-message">{log.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="error-modal-footer">
+              <button className="error-modal-view-logs" onClick={() => {
+                setShowDebugLogs(true);
+                closeErrorModal();
+              }}>
+                查看完整日志
+              </button>
+              <button className="error-modal-ok" onClick={closeErrorModal}>确定</button>
+            </div>
           </div>
         </div>
       )}
