@@ -23,12 +23,41 @@ const CycleTrading = ({ account, provider, chainId }) => {
   // 合约地址
   const CONTRACT_ADDRESS = '0xb300000b72DEAEb607a12d5f54773D1C19c7028d';
   
-  // 代币地址
-  const USDT_ADDRESS = '0x55d398326f99059ff775485246999027b3197955';
-  const BR_ADDRESS = '0xff7d6a96ae471bbcd7713af9cb1feeb16cf56b41';
+  // 代币配置 - 支持多代币循环交易
+  const TOKEN_CONFIGS = {
+    'quq': {
+      name: 'quq Token',
+      symbol: 'quq',
+      address: '0x4fa7C69a7B69f8Bc48233024D546bc299d6B03bf',
+      poolAddress: '0x9485Ff32b6b4444C21D5abe4D9a2283d127075a2',
+      decimals: 18,
+      needsPriceInversion: true  // quq需要价格倒数处理
+    },
+    'KOGE': {
+      name: 'KOGE Token', 
+      symbol: 'KOGE',
+      address: '0xe6DF05CE8C8301223373CF5B969AFCb1498c5528',
+      poolAddress: '0xcF59B8C8BAA2dea520e3D549F97d4e49aDE17057',
+      decimals: 18,
+      needsPriceInversion: false  // KOGE不需要价格倒数处理
+    },
+    'BR': {
+      name: 'BR Token',
+      symbol: 'BR', 
+      address: '0xff7d6a96ae471bbcd7713af9cb1feeb16cf56b41',
+      poolAddress: '0x380aaDF63D84D3A434073F1d5d95f02fB23d5228',
+      decimals: 18,
+      needsPriceInversion: false  // BR不需要价格倒数处理
+    }
+  };
+
+  // 当前选中的代币（默认为quq，后续可通过UI切换）
+  const [selectedToken, setSelectedToken] = useState('quq');
   
-  // PancakeSwap V3 地址
-  const V3_POOL_ADDRESS = '0x380aaDF63D84D3A434073F1d5d95f02fB23d5228';
+  // 基础配置
+  const TOKEN_A_ADDRESS = '0x55d398326f99059ff775485246999027b3197955'; // USDT（固定）
+  const TOKEN_B_ADDRESS = TOKEN_CONFIGS[selectedToken]?.address || '请填写代币地址'; // 选中的代币地址
+  const POOL_ADDRESS = TOKEN_CONFIGS[selectedToken]?.poolAddress || '请填写池地址'; // 对应的池地址
 
   // 日志记录函数
   const addDebugLog = (message, level = 'info') => {
@@ -148,41 +177,116 @@ const CycleTrading = ({ account, provider, chainId }) => {
     try {
       console.log('=== 使用PancakeSwap V3 Pool slot0 查询价格 ===');
       console.log('输入USDT数量:', usdtAmountInput);
+      console.log('目标池地址:', POOL_ADDRESS);
+      console.log('当前代币:', TOKEN_CONFIGS[selectedToken]?.symbol || 'UNKNOWN');
+      console.log('USDT地址:', TOKEN_A_ADDRESS);
+      console.log('代币地址:', TOKEN_B_ADDRESS);
+      
+      addDebugLog(`🔍 开始查询V3价格 - 输入: ${usdtAmountInput} USDT`, 'info');
+      addDebugLog(`🏊 池子信息: ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}/USDT (${POOL_ADDRESS.slice(0,8)}...)`, 'info');
+      addDebugLog(`🔗 USDT: ${TOKEN_A_ADDRESS.slice(0,8)}... | ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}: ${TOKEN_B_ADDRESS.slice(0,8)}...`, 'info');
       
       const slot0Result = await provider.call({
-        to: V3_POOL_ADDRESS,
+        to: POOL_ADDRESS,
         data: '0x3850c7bd' // slot0() 方法ID
       });
       
+      console.log('slot0调用结果 (原始):', slot0Result);
+      addDebugLog(`📡 slot0调用结果: ${slot0Result}`, 'info');
+      
       if (!slot0Result || slot0Result === '0x') {
         console.error('❌ 无法获取V3 slot0信息');
+        addDebugLog('❌ slot0调用失败 - 返回空结果', 'error');
         return '0';
       }
       
       const sqrtPriceX96Hex = '0x' + slot0Result.slice(2, 66);
       const sqrtPriceX96 = ethers.getBigInt(sqrtPriceX96Hex);
       
+      console.log('解析的sqrtPriceX96 (hex):', sqrtPriceX96Hex);
+      console.log('解析的sqrtPriceX96 (bigint):', sqrtPriceX96.toString());
+      addDebugLog(`📊 sqrtPriceX96: ${sqrtPriceX96.toString()}`, 'info');
+      
       const Q96 = ethers.getBigInt('79228162514264337593543950336');
       const sqrtPriceNumber = Number(sqrtPriceX96.toString()) / Number(Q96.toString());
       const price = sqrtPriceNumber * sqrtPriceNumber;
       
+      console.log('计算的sqrtPrice (number):', sqrtPriceNumber);
+      console.log('计算的price (number):', price);
+      addDebugLog(`💰 原始价格: ${price.toFixed(10)}`, 'info');
+      
+      // 获取当前代币的价格处理配置
+      const needsPriceInversion = TOKEN_CONFIGS[selectedToken]?.needsPriceInversion || false;
+      console.log('代币价格倒数配置:', needsPriceInversion);
+      addDebugLog(`🔧 ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}价格倒数配置: ${needsPriceInversion}`, 'info');
+      if (needsPriceInversion) {
+        addDebugLog(`💡 ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}在池子中的排列顺序需要价格倒数处理`, 'info');
+      } else {
+        addDebugLog(`💡 ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}在池子中使用直接价格`, 'info');
+      }
+      
+      let finalPrice;
       let brOutput;
+      let priceCalculationMethod = '';
       const usdtAmountFloat = parseFloat(usdtAmountInput);
       
-      if (price > 0.001 && price < 1000) {
-        brOutput = (usdtAmountFloat * price).toString();
-      } else if (price > 1000) {
-        const inversedPrice = 1 / price;
-        brOutput = (usdtAmountFloat * inversedPrice).toString();
+      if (needsPriceInversion) {
+        // 需要倒数处理的代币（如quq）
+        finalPrice = 1 / price;
+        brOutput = (usdtAmountFloat * finalPrice).toString();
+        priceCalculationMethod = '倒数价格计算';
+        console.log('使用倒数价格计算: USDT * (1/price) =', brOutput);
+        addDebugLog(`🔄 使用倒数价格: ${price.toFixed(10)} → ${finalPrice.toFixed(10)}`, 'info');
       } else {
-        brOutput = (usdtAmountFloat / price).toString();
+        // 不需要倒数处理的代币（如KOGE、BR）
+        finalPrice = price;
+        brOutput = (usdtAmountFloat * finalPrice).toString();
+        priceCalculationMethod = '直接价格计算';
+        console.log('使用直接价格计算: USDT * price =', brOutput);
+        addDebugLog(`➡️ 使用直接价格: ${finalPrice.toFixed(10)}`, 'info');
       }
+      
+      console.log('价格计算方法:', priceCalculationMethod);
+      console.log('计算结果:', brOutput);
+      console.log('使用的最终价格:', finalPrice.toFixed(10));
+      addDebugLog(`🧮 ${priceCalculationMethod}: ${usdtAmountFloat} USDT → ${brOutput} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`, 'success');
+      addDebugLog(`📈 使用价格: ${finalPrice.toFixed(10)} (${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}/USDT)`, 'info');
       
       const brOutputFloat = parseFloat(brOutput);
       if (brOutputFloat <= 0 || brOutputFloat > 1000000000) {
-        console.warn('计算结果不合理，使用备用方案');
-        brOutput = (usdtAmountFloat * 100).toString();
+        console.warn('计算结果不合理，尝试其他计算方式');
+        console.warn('原始结果:', brOutput, '转换为浮点数:', brOutputFloat);
+        console.warn('原始价格:', price, '使用的最终价格:', finalPrice);
+        addDebugLog(`⚠️ 计算结果不合理 (${brOutputFloat})，尝试其他计算方式`, 'warning');
+        
+        // 尝试其他计算方式
+        let alternativeOutput;
+        if (needsPriceInversion) {
+          // 如果之前用倒数，现在试试直接计算
+          alternativeOutput = (usdtAmountFloat * price).toString();
+          addDebugLog(`🔄 尝试直接价格计算: ${usdtAmountFloat} USDT * ${price.toFixed(10)} = ${alternativeOutput}`, 'warning');
+        } else {
+          // 如果之前用直接，现在试试倒数
+          alternativeOutput = (usdtAmountFloat / price).toString();
+          addDebugLog(`🔄 尝试倒数价格计算: ${usdtAmountFloat} USDT / ${price.toFixed(10)} = ${alternativeOutput}`, 'warning');
+        }
+        
+        const alternativeFloat = parseFloat(alternativeOutput);
+        if (alternativeFloat > 0 && alternativeFloat <= 1000000000) {
+          brOutput = alternativeOutput;
+          addDebugLog(`✅ 替代计算方式成功: ${brOutput} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`, 'success');
+        } else {
+          // 最后的备用方案
+          brOutput = (usdtAmountFloat * 100).toString();
+          addDebugLog(`🔄 最终备用方案: ${usdtAmountFloat} USDT → ${brOutput} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`, 'warning');
+        }
       }
+      
+      const finalExchangeRate = parseFloat(brOutput) / usdtAmountFloat;
+      console.log('最终兑换率: 1 USDT =', finalExchangeRate.toFixed(8), TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN');
+      console.log('最终输出结果:', brOutput, TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN');
+      addDebugLog(`✅ 最终兑换率: 1 USDT = ${finalExchangeRate.toFixed(8)} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`, 'success');
+      addDebugLog(`📋 最终输出: ${brOutput} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`, 'success');
       
       return brOutput;
       
@@ -191,8 +295,9 @@ const CycleTrading = ({ account, provider, chainId }) => {
       console.error('错误信息:', error.message);
       console.error('完整错误:', error);
       console.error('输入USDT数量:', usdtAmountInput);
-      console.error('V3池地址:', V3_POOL_ADDRESS);
+      console.error('V3池地址:', POOL_ADDRESS);
       console.error('Provider状态:', provider ? '正常' : '空值');
+      addDebugLog(`❌ V3价格查询失败: ${error.message}`, 'error');
       return '0';
     }
   };
@@ -206,35 +311,93 @@ const CycleTrading = ({ account, provider, chainId }) => {
     try {
       console.log('=== 使用PancakeSwap V3反向查询价格 ===');
       console.log('输入BR数量:', brAmountInput);
+      console.log('目标池地址:', POOL_ADDRESS);
+      console.log('当前代币:', TOKEN_CONFIGS[selectedToken]?.symbol || 'UNKNOWN');
+      console.log('USDT地址:', TOKEN_A_ADDRESS);
+      console.log('代币地址:', TOKEN_B_ADDRESS);
+      
+      addDebugLog(`🔍 开始反向查询V3价格 - 输入: ${brAmountInput} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`, 'info');
+      addDebugLog(`🏊 反向查询池子信息: ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}/USDT (${POOL_ADDRESS.slice(0,8)}...)`, 'info');
       
       const slot0Result = await provider.call({
-        to: V3_POOL_ADDRESS,
+        to: POOL_ADDRESS,
         data: '0x3850c7bd' // slot0() 方法ID
       });
       
+      console.log('反向查询slot0调用结果 (原始):', slot0Result);
+      addDebugLog(`📡 反向查询slot0调用结果: ${slot0Result}`, 'info');
+      
+      if (!slot0Result || slot0Result === '0x') {
+        console.error('❌ 反向查询无法获取V3 slot0信息');
+        addDebugLog('❌ 反向查询slot0调用失败 - 返回空结果', 'error');
+        return '0';
+      }
+      
       const sqrtPriceX96Hex = '0x' + slot0Result.slice(2, 66);
       const sqrtPriceX96 = ethers.getBigInt(sqrtPriceX96Hex);
+      
+      console.log('反向查询解析的sqrtPriceX96 (hex):', sqrtPriceX96Hex);
+      console.log('反向查询解析的sqrtPriceX96 (bigint):', sqrtPriceX96.toString());
+      addDebugLog(`📊 反向查询sqrtPriceX96: ${sqrtPriceX96.toString()}`, 'info');
       
       const Q96 = ethers.getBigInt('79228162514264337593543950336');
       const sqrtPriceNumber = Number(sqrtPriceX96.toString()) / Number(Q96.toString());
       const price = sqrtPriceNumber * sqrtPriceNumber;
       
+      console.log('反向查询计算的sqrtPrice (number):', sqrtPriceNumber);
+      console.log('反向查询计算的price (number):', price);
+      addDebugLog(`💰 反向查询原始价格: ${price.toFixed(10)}`, 'info');
+      
+      // 获取当前代币的价格处理配置
+      const needsPriceInversion = TOKEN_CONFIGS[selectedToken]?.needsPriceInversion || false;
+      console.log('反向查询代币价格倒数配置:', needsPriceInversion);
+      addDebugLog(`🔧 反向查询${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}价格倒数配置: ${needsPriceInversion}`, 'info');
+      if (needsPriceInversion) {
+        addDebugLog(`💡 反向查询时${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}使用直接除法（因正向需要倒数）`, 'info');
+      } else {
+        addDebugLog(`💡 反向查询时${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}使用标准除法`, 'info');
+      }
+      
       const brAmountFloat = parseFloat(brAmountInput);
       let usdtOutput;
+      let priceCalculationMethod = '';
+      let reverseFinalPrice;
       
-      if (price > 0.001 && price < 1000) {
-        usdtOutput = (brAmountFloat / price).toString();
-      } else if (price > 1000) {
-        usdtOutput = (brAmountFloat * price).toString();
+      if (needsPriceInversion) {
+        // 需要倒数处理的代币（如quq）
+        // 反向查询时：如果正向需要倒数，反向就用直接除法
+        reverseFinalPrice = price;  // 不倒数
+        usdtOutput = (brAmountFloat / reverseFinalPrice).toString();
+        priceCalculationMethod = '反向直接除法计算';
+        console.log('反向查询使用直接除法: BR / price =', usdtOutput);
+        addDebugLog(`🔄 反向查询用直接价格: ${reverseFinalPrice.toFixed(10)}`, 'info');
       } else {
-        usdtOutput = (brAmountFloat * price).toString();
+        // 不需要倒数处理的代币（如KOGE、BR）
+        // 反向查询时：正常除法
+        reverseFinalPrice = price;
+        usdtOutput = (brAmountFloat / reverseFinalPrice).toString();
+        priceCalculationMethod = '反向除法计算';
+        console.log('反向查询使用除法计算: BR / price =', usdtOutput);
+        addDebugLog(`➡️ 反向查询用直接价格: ${reverseFinalPrice.toFixed(10)}`, 'info');
       }
+      
+      console.log('反向查询价格计算方法:', priceCalculationMethod);
+      console.log('反向查询计算结果:', usdtOutput);
+      console.log('反向查询使用的最终价格:', reverseFinalPrice.toFixed(10));
+      addDebugLog(`🧮 反向查询${priceCalculationMethod}: ${brAmountFloat} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'} → ${usdtOutput} USDT`, 'success');
+      addDebugLog(`📈 反向查询使用价格: ${reverseFinalPrice.toFixed(10)} (原始价格)`, 'info');
       
       const usdtOutputFloat = parseFloat(usdtOutput);
       if (usdtOutputFloat <= 0 || isNaN(usdtOutputFloat)) {
-        console.error('❌ 计算结果无效:', usdtOutput);
+        console.error('❌ 反向查询计算结果无效:', usdtOutput);
+        console.error('转换为浮点数后:', usdtOutputFloat);
+        addDebugLog(`❌ 反向查询计算结果无效 (${usdtOutput} → ${usdtOutputFloat})`, 'error');
         return '0';
       }
+      
+      const finalReverseExchangeRate = brAmountFloat / usdtOutputFloat;
+      console.log('最终反向兑换率: 1 USDT =', finalReverseExchangeRate.toFixed(8), TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN');
+      addDebugLog(`✅ 最终反向兑换率: 1 USDT = ${finalReverseExchangeRate.toFixed(8)} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`, 'success');
       
       return usdtOutputFloat.toFixed(8);
       
@@ -243,8 +406,9 @@ const CycleTrading = ({ account, provider, chainId }) => {
       console.error('错误信息:', error.message);
       console.error('完整错误:', error);
       console.error('输入BR数量:', brAmountInput);
-      console.error('V3池地址:', V3_POOL_ADDRESS);
+      console.error('V3池地址:', POOL_ADDRESS);
       console.error('Provider状态:', provider ? '正常' : '空值');
+      addDebugLog(`❌ 反向查询失败: ${error.message}`, 'error');
       return '0';
     }
   };
@@ -257,24 +421,39 @@ const CycleTrading = ({ account, provider, chainId }) => {
     }
     
     try {
+      console.log('=== 获取代币余额 ===');
+      console.log('当前代币:', TOKEN_CONFIGS[selectedToken]?.symbol || 'UNKNOWN');
+      console.log('代币地址:', TOKEN_B_ADDRESS);
+      console.log('账户地址:', account);
+      
+      addDebugLog(`🏦 查询${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}余额`, 'info');
+      
       const balanceOfData = '0x70a08231' + account.slice(2).padStart(64, '0');
+      console.log('余额查询数据:', balanceOfData);
+      
       const result = await provider.call({
-        to: BR_ADDRESS,
+        to: TOKEN_B_ADDRESS,
         data: balanceOfData
       });
       
+      console.log('余额查询结果 (原始):', result);
+      
       const balanceInEther = ethers.formatEther(result);
+      console.log('余额 (格式化):', balanceInEther);
+      
       setBrBalance(balanceInEther);
+      addDebugLog(`✅ ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}余额: ${balanceInEther}`, 'success');
       
       return balanceInEther;
       
     } catch (error) {
-      console.error('=== 获取BR余额失败 ===');
+      console.error('=== 获取代币余额失败 ===');
       console.error('错误信息:', error.message);
       console.error('完整错误:', error);
       console.error('账户地址:', account);
-      console.error('BR代币地址:', BR_ADDRESS);
+      console.error('代币地址:', TOKEN_B_ADDRESS);
       console.error('Provider状态:', provider ? '正常' : '空值');
+      addDebugLog(`❌ 获取${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}余额失败: ${error.message}`, 'error');
       setBrBalance('0');
       return '0';
     }
@@ -288,14 +467,27 @@ const CycleTrading = ({ account, provider, chainId }) => {
     }
     
     try {
+      console.log('=== 获取USDT余额 ===');
+      console.log('USDT地址:', TOKEN_A_ADDRESS);
+      console.log('账户地址:', account);
+      
+      addDebugLog(`🏦 查询USDT余额`, 'info');
+      
       const balanceOfData = '0x70a08231' + account.slice(2).padStart(64, '0');
+      console.log('USDT余额查询数据:', balanceOfData);
+      
       const result = await provider.call({
-        to: USDT_ADDRESS,
+        to: TOKEN_A_ADDRESS,
         data: balanceOfData
       });
       
+      console.log('USDT余额查询结果 (原始):', result);
+      
       const balanceInEther = ethers.formatEther(result);
+      console.log('USDT余额 (格式化):', balanceInEther);
+      
       setUsdtBalance(balanceInEther);
+      addDebugLog(`✅ USDT余额: ${balanceInEther}`, 'success');
       
       return balanceInEther;
       
@@ -304,8 +496,9 @@ const CycleTrading = ({ account, provider, chainId }) => {
       console.error('错误信息:', error.message);
       console.error('完整错误:', error);
       console.error('账户地址:', account);
-      console.error('USDT代币地址:', USDT_ADDRESS);
+      console.error('USDT代币地址:', TOKEN_A_ADDRESS);
       console.error('Provider状态:', provider ? '正常' : '空值');
+      addDebugLog(`❌ 获取USDT余额失败: ${error.message}`, 'error');
       setUsdtBalance('0');
       return '0';
     }
@@ -316,17 +509,24 @@ const CycleTrading = ({ account, provider, chainId }) => {
     try {
       setIsLoadingBalance(true);
       console.log('开始刷新所有余额...');
+      addDebugLog(`🔄 开始刷新所有余额`, 'info');
+      
       const results = await Promise.all([getBRBalance(), getUSDTBalance()]);
+      
       console.log('余额刷新完成:', {
-        BR: results[0],
+        [TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN']: results[0],
         USDT: results[1]
       });
+      
+      addDebugLog(`✅ 余额刷新完成 - ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}: ${results[0]}, USDT: ${results[1]}`, 'success');
+      
       setLastBalanceUpdate(new Date());
       return results;
     } catch (error) {
       console.error('=== 刷新余额失败 ===');
       console.error('错误信息:', error.message);
       console.error('完整错误:', error);
+      addDebugLog(`❌ 刷新余额失败: ${error.message}`, 'error');
       return ['0', '0'];
     } finally {
       setIsLoadingBalance(false);
@@ -351,6 +551,20 @@ const CycleTrading = ({ account, provider, chainId }) => {
 
   // 构建交易数据 (复用 FixedTrade 的逻辑)
   const buildTransactionData = (isUsdtToBr = true, usdtAmount, brAmount) => {
+    // 获取代币地址（去掉0x前缀）
+    const tokenAAddr = TOKEN_A_ADDRESS.slice(2).toLowerCase(); // USDT地址（去掉0x）
+    const tokenBAddr = TOKEN_B_ADDRESS.slice(2).toLowerCase(); // 选中代币地址（去掉0x）
+    
+    // 构建代币地址参数
+    const tokenAParam = '000000000000000000000000' + tokenAAddr; // 32字节对齐的USDT地址
+    const tokenBParam = '000000000000000000000000' + tokenBAddr; // 32字节对齐的选中代币地址
+    
+    // 分割代币地址参数用于参数拼接（基于32字节对齐后的地址参数按照28+4字节分割）
+    const tokenAPart1 = tokenAParam.slice(0, 56); // USDT地址参数的前56字符（前28字节）
+    const tokenAPart2 = tokenAParam.slice(56); // USDT地址参数的后8字符（后4字节）
+    const tokenBPart1 = tokenBParam.slice(0, 56); // 选中代币地址参数的前56字符（前28字节）
+    const tokenBPart2 = tokenBParam.slice(56); // 选中代币地址参数的后8字符（后4字节）
+    
     // 计算时间戳：当前时间 + 2分钟（120秒），使用毫秒时间戳
     const currentTime = Date.now(); // 当前毫秒时间戳
     const deadline = currentTime + (120 * 1000); // 加2分钟（120000毫秒）
@@ -371,6 +585,18 @@ const CycleTrading = ({ account, provider, chainId }) => {
     const brPart2 = brAmountHex.slice(56, 64); // 后4字节（8个十六进制字符）用于参数11前4字节
     
     console.log('=== 循环交易数据构建 ===');
+    console.log('代币A地址(USDT):', TOKEN_A_ADDRESS);
+    console.log('代币B地址(选中代币):', TOKEN_B_ADDRESS);
+    console.log('池地址:', POOL_ADDRESS);
+    console.log('=== 代币地址分割 ===');
+    console.log('tokenAAddr (原始地址):', tokenAAddr);
+    console.log('tokenBAddr (原始地址):', tokenBAddr);
+    console.log('tokenAParam (32字节对齐):', tokenAParam);
+    console.log('tokenBParam (32字节对齐):', tokenBParam);
+    console.log('tokenAPart1 (前56字符/28字节):', tokenAPart1);
+    console.log('tokenAPart2 (后8字符/4字节):', tokenAPart2);
+    console.log('tokenBPart1 (前56字符/28字节):', tokenBPart1);
+    console.log('tokenBPart2 (后8字符/4字节):', tokenBPart2);
     console.log('当前毫秒时间戳:', currentTime);
     console.log('截止毫秒时间戳:', deadline);
     console.log('截止时间十六进制:', deadlineHex);
@@ -380,11 +606,24 @@ const CycleTrading = ({ account, provider, chainId }) => {
     console.log('USDT数量十六进制:', usdtAmountHex);
     console.log('USDT第一部分(参数16后28字节):', usdtPart1);
     console.log('USDT第二部分(参数17前4字节):', usdtPart2);
-    console.log('BR数量:', brAmount);
-    console.log('BR数量十六进制:', brAmountHex);
-    console.log('BR完整数量(参数4):', brAmountHex);
-    console.log('BR第一部分(参数10后28字节):', brPart1);
-    console.log('BR第二部分(参数11前4字节):', brPart2);
+    console.log('选中代币数量:', brAmount);
+    console.log('选中代币数量十六进制:', brAmountHex);
+    console.log('选中代币完整数量(参数4):', brAmountHex);
+    console.log('选中代币第一部分(参数10后28字节):', brPart1);
+    console.log('选中代币第二部分(参数11前4字节):', brPart2);
+    
+    // 动态获取当前选中代币的池子地址
+    const poolAddr = POOL_ADDRESS.slice(2).toLowerCase(); // 去掉0x前缀
+    const poolParam = poolAddr; // 32字节对齐的池子地址
+    const poolPart1 = poolParam.slice(0, 32); // 池子地址的前16字节
+    const poolPart2 = poolParam.slice(32); // 池子地址的后4字节
+    
+    console.log('=== 池子地址处理 ===');
+    console.log('原始池子地址:', POOL_ADDRESS);
+    console.log('池子地址(去0x):', poolAddr);
+    console.log('池子地址32字节对齐:', poolParam);
+    console.log('池子地址前28字节:', poolPart1);
+    console.log('池子地址后4字节:', poolPart2);
     
     // 您提供的完整交易数据
     const methodId = '0xe5e8894b';
@@ -395,23 +634,23 @@ const CycleTrading = ({ account, provider, chainId }) => {
       // USDT -> BR 交易参数
       params = [
         '0000000000000000000000005efc784d444126ecc05f22c49ff3fbd7d9f4868a', // 参数0
-        '00000000000000000000000055d398326f99059ff775485246999027b3197955', // 参数1
+        tokenAParam, // 参数1: USDT地址
         usdtAmountHex, // 参数2: USDT数量
-        '000000000000000000000000ff7d6a96ae471bbcd7713af9cb1feeb16cf56b41', // 参数3
-        brAmountHex, // 参数4: BR数量
+        tokenBParam, // 参数3: 选中代币地址
+        brAmountHex, // 参数4: 选中代币数量
         '00000000000000000000000000000000000000000000000000000000000000c0', // 参数5
         '0000000000000000000000000000000000000000000000000000000000000404', // 参数6
         '9aa9035600000000000000000000000000000000000000000000000000000000', // 参数7
-        '0000000000000000000000000000000055d398326f99059ff775485246999027', // 参数8
-        'b3197955000000000000000000000000ff7d6a96ae471bbcd7713af9cb1feeb1', // 参数9
-        '6cf56b41' + brPart1, // 参数10: 前4字节固定 + 后28字节BR数量
-        brPart2 + timestampPart1, // 参数11: 前4字节BR数量 + 后28字节时间戳
-        timestampPart2 + '00000000000000000000000000000000000000000000000000000000', // 参数12: 前4字节时间戳 + 后28字节固定
+        '00000000' + tokenAPart1, // 参数8: 前4字节固定，USDT地址的前28字节
+        tokenAPart2 + tokenBPart1, // 参数9: USDT地址后4字节 + 选中代币地址前28字节
+        tokenBPart2 + brPart1, // 参数10: 选中代币地址后4字节 + 选中代币数量的前28字节
+        brPart2 + timestampPart1, // 参数11: 选中代币数量的后4字节 + 时间戳的前28字节
+        timestampPart2 + '00000000000000000000000000000000000000000000000000000000', // 参数12: 时间戳的后4字节 + 后28字节固定
         '0000010000000000000000000000000000000000000000000000000000000000', // 参数13
         '0000014000000000000000000000000000000000000000000000000000000000', // 参数14
         '0000000000000000000000000000000000000000000000000000000000000000', // 参数15
-        '00000001' + usdtPart1, // 参数16: 前4字节固定 + 后28字节USDT数量
-        usdtPart2 + '00000000000000000000000000000000000000000000000000000000', // 参数17: 前4字节USDT数量 + 后28字节固定
+        '00000001' + usdtPart1, // 参数16: 前4字节固定 + USDT数量的前28字节
+        usdtPart2 + '00000000000000000000000000000000000000000000000000000000', // 参数17: USDT数量的后4字节 + 后28字节固定
         '0000000100000000000000000000000000000000000000000000000000000000', // 参数18
         '0000002000000000000000000000000000000000000000000000000000000000', // 参数19
         '0000000100000000000000000000000000000000000000000000000000000000', // 参数20
@@ -419,38 +658,38 @@ const CycleTrading = ({ account, provider, chainId }) => {
         '000000a000000000000000000000000000000000000000000000000000000000', // 参数22
         '000000e000000000000000000000000000000000000000000000000000000000', // 参数23
         '0000012000000000000000000000000000000000000000000000000000000000', // 参数24
-        '0000016000000000000000000000000055d398326f99059ff775485246999027', // 参数25
-        'b319795500000000000000000000000000000000000000000000000000000000', // 参数26
+        '00000160' + tokenAPart1, // 参数25: 固定前缀 + USDT地址的前28字节
+        tokenAPart2 + '00000000000000000000000000000000000000000000000000000000', // 参数26: USDT地址的后4字节 + 固定后缀
         '0000000102000000000000000000000000000000000000000000000000000000', // 参数27
         '0000000000000000000000000000000000000000000000000000000000000000', // 参数28
         '000000010000000000000000000000005efc784d444126ecc05f22c49ff3fbd7', // 参数29
         'd9f4868a00000000000000000000000000000000000000000000000000000000', // 参数30
-        '00000001000000000000000000002710380aadf63d84d3a434073f1d5d95f02f', // 参数31
-        'b23d522800000000000000000000000000000000000000000000000000000000', // 参数32
+        '00000001000000000000000000002710' + poolPart1, // 参数31: 固定前缀 + 当前池子地址前16字节
+        poolPart2 + '00000000000000000000000000000000000000000000000000000000', // 参数32: 当前池子地址后4字节 + 固定后缀
         '0000000100000000000000000000000000000000000000000000000000000000', // 参数33
         '0000002000000000000000000000000000000000000000000000000000000000', // 参数34
         '0000008000000000000000000000000000000000000000000000000000000000', // 参数35
-        '0000000000000000000000000000000055d398326f99059ff775485246999027', // 参数36
-        'b3197955000000000000000000000000ff7d6a96ae471bbcd7713af9cb1feeb1', // 参数37
-        '6cf56b4100000000000000000000000000000000000000000000000000000000', // 参数38
+        '00000000' + tokenAPart1, // 参数36: 固定前缀 + USDT地址的前28字节
+        tokenAPart2 + tokenBPart1, // 参数37: USDT地址的后4字节 + 选中代币地址的前28字节
+        tokenBPart2 + '00000000000000000000000000000000000000000000000000000000', // 参数38: 选中代币地址后4字节 + 固定后缀
         '0000006400000000000000000000000000000000000000000000000000000000'  // 参数39
       ];
     } else {
-      // BR -> USDT 交易参数
+      // BR -> USDT 交易参数（代币方向相反）
       params = [
         '0000000000000000000000005efc784d444126ecc05f22c49ff3fbd7d9f4868a', // 参数0
-        '000000000000000000000000ff7d6a96ae471bbcd7713af9cb1feeb16cf56b41', // 参数1
-        brAmountHex, // 参数2: BR数量
-        '00000000000000000000000055d398326f99059ff775485246999027b3197955', // 参数3
+        tokenBParam, // 参数1: 选中代币地址
+        brAmountHex, // 参数2: 选中代币数量
+        tokenAParam, // 参数3: USDT地址
         usdtAmountHex, // 参数4: USDT数量
         '00000000000000000000000000000000000000000000000000000000000000c0', // 参数5
         '0000000000000000000000000000000000000000000000000000000000000404', // 参数6
         '9aa9035600000000000000000000000000000000000000000000000000000000', // 参数7
-        '00000000000000000000000000000000ff7d6a96ae471bbcd7713af9cb1feeb1', // 参数8
-        '6cf56b4100000000000000000000000055d398326f99059ff775485246999027', // 参数9
-        'b3197955' + usdtPart1, // 参数10: 前4字节固定 + 后28字节USDT数量
-        usdtPart2 + timestampPart1, // 参数11: 前4字节USDT数量 + 后28字节时间戳
-        timestampPart2 + '00000000000000000000000000000000000000000000000000000000', // 参数12: 前4字节时间戳 + 后28字节固定
+        '00000000' + tokenBPart1, // 参数8: 选中代币地址前28字节
+        tokenBPart2 + tokenAPart1, // 参数9: 选中代币地址后4字节 + USDT地址前28字节
+        tokenAPart2 + usdtPart1, // 参数10: USDT地址后4字节 + USDT数量的前28字节
+        usdtPart2 + timestampPart1, // 参数11: USDT数量后4字节 + 时间戳的前28字节
+        timestampPart2 + '00000000000000000000000000000000000000000000000000000000', // 参数12: 时间戳的后4字节 + 后28字节固定
         '0000010000000000000000000000000000000000000000000000000000000000', // 参数13
         '0000014000000000000000000000000000000000000000000000000000000000', // 参数14
         '0000000000000000000000000000000000000000000000000000000000000000', // 参数15
@@ -463,27 +702,27 @@ const CycleTrading = ({ account, provider, chainId }) => {
         '000000a000000000000000000000000000000000000000000000000000000000', // 参数22
         '000000e000000000000000000000000000000000000000000000000000000000', // 参数23
         '0000012000000000000000000000000000000000000000000000000000000000', // 参数24
-        '00000160000000000000000000000000ff7d6a96ae471bbcd7713af9cb1feeb1', // 参数25
-        '6cf56b4100000000000000000000000000000000000000000000000000000000', // 参数26
+        '00000160' + tokenBPart1, // 参数25: 固定前缀 + 选中代币地址前28字节
+        tokenBPart2 + '00000000000000000000000000000000000000000000000000000000', // 参数26: 选中代币地址后4字节 + 固定后缀
         '0000000102000000000000000000000000000000000000000000000000000000', // 参数27
         '0000000000000000000000000000000000000000000000000000000000000000', // 参数28
         '000000010000000000000000000000005efc784d444126ecc05f22c49ff3fbd7', // 参数29
         'd9f4868a00000000000000000000000000000000000000000000000000000000', // 参数30
-        '00000001000000000000000000002710380aadf63d84d3a434073f1d5d95f02f', // 参数31
-        'b23d522800000000000000000000000000000000000000000000000000000000', // 参数32
+        '00000001000000000000000000002710' + poolPart1, // 参数31: 固定16字节前缀 + 当前池子地址前16字节
+        poolPart2 + '00000000000000000000000000000000000000000000000000000000', // 参数32: 当前池子地址后4字节 + 固定后缀
         '0000000100000000000000000000000000000000000000000000000000000000', // 参数33
         '0000002000000000000000000000000000000000000000000000000000000000', // 参数34
         '0000008000000000000000000000000000000000000000000000000000000000', // 参数35
-        '00000000000000000000000000000000ff7d6a96ae471bbcd7713af9cb1feeb1', // 参数36
-        '6cf56b4100000000000000000000000055d398326f99059ff775485246999027', // 参数37
-        'b319795500000000000000000000000000000000000000000000000000000000', // 参数38
+        '00000000' + tokenBPart1, // 参数36: 固定前缀 + 选中代币地址
+        tokenBPart2 + tokenAPart1, // 参数37: 选中代币地址后4字节 + USDT地址前16字节
+        tokenAPart2 + '00000000000000000000000000000000000000000000000000000000', // 参数38: USDT地址后4字节 + 固定后缀
         '0000006400000000000000000000000000000000000000000000000000000000'  // 参数39
       ];
     }
     
     console.log('=== 循环交易类型 ===');
-    console.log('交易方向:', isUsdtToBr ? 'USDT -> BR' : 'BR -> USDT');
-    console.log('使用的参数数组:', isUsdtToBr ? 'USDT->BR参数' : 'BR->USDT参数');
+    console.log('交易方向:', isUsdtToBr ? 'USDT -> 选中代币' : '选中代币 -> USDT');
+    console.log('使用的参数数组:', isUsdtToBr ? 'USDT->选中代币参数' : '选中代币->USDT参数');
 
     // 打印完整的参数数组
     console.log('=== 完整参数数组 ===');
@@ -802,9 +1041,16 @@ const CycleTrading = ({ account, provider, chainId }) => {
       
       // 第一步：用USDT购买BR
       setCycleStatus(`第 ${cycleIndex} 次循环：计算购买BR数量...`);
+      addDebugLog(`📊 第 ${cycleIndex} 次循环开始价格查询`, 'info');
+      addDebugLog(`输入USDT数量: ${usdtAmountPerCycle} USDT`, 'info');
+      addDebugLog(`目标代币: ${TOKEN_CONFIGS[selectedToken]?.symbol || 'UNKNOWN'}`, 'info');
+      
       const expectedBRAmount = await getAmountOutV3(usdtAmountPerCycle);
       
+      addDebugLog(`V3价格查询结果: ${expectedBRAmount} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`, 'success');
+      
       if (parseFloat(expectedBRAmount) <= 0) {
+        addDebugLog(`❌ 价格查询结果无效: ${expectedBRAmount}`, 'error');
         throw new Error('无法获取BR价格');
       }
       
@@ -858,7 +1104,13 @@ const CycleTrading = ({ account, provider, chainId }) => {
       
       setCycleStatus(`第 ${cycleIndex} 次循环：计算卖出USDT数量...`);
       // 重要：只计算实际购买到的BR数量能换回多少USDT，而不是使用总余额
+      addDebugLog(`📊 第 ${cycleIndex} 次循环开始反向价格查询`, 'info');
+      addDebugLog(`输入${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}数量: ${actualBrBought.toFixed(8)}`, 'info');
+      
       const expectedUSDTAmount = await getUsdtAmountFromBr(actualBrBought.toFixed(8));
+      
+      addDebugLog(`反向V3价格查询结果: ${expectedUSDTAmount} USDT`, 'success');
+      
       const minUSDTAmount = (parseFloat(expectedUSDTAmount) * 0.99985).toFixed(8);
       
       // 检查是否被用户停止
@@ -1199,6 +1451,28 @@ const CycleTrading = ({ account, provider, chainId }) => {
             <h3>📊 交易参数</h3>
             
             <div className="param-input">
+              <label>选择交易代币:</label>
+              <select 
+                value={selectedToken} 
+                onChange={(e) => setSelectedToken(e.target.value)}
+                className="param-input-field"
+                disabled={isCycling}
+              >
+                {Object.keys(TOKEN_CONFIGS).map(token => (
+                  <option key={token} value={token}>
+                    {TOKEN_CONFIGS[token].symbol}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="token-info">
+              <p>当前代币: {TOKEN_CONFIGS[selectedToken]?.symbol || '未知'}</p>
+              <p>代币地址: {TOKEN_B_ADDRESS}</p>
+              <p>池地址: {POOL_ADDRESS}</p>
+            </div>
+            
+            <div className="param-input">
               <label>循环次数:</label>
               <input
                 type="number"
@@ -1245,9 +1519,9 @@ const CycleTrading = ({ account, provider, chainId }) => {
                 </span>
               </div>
               <div className="balance-item">
-                <span>当前BR余额:</span>
+                <span>当前{TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}余额:</span>
                 <span className="balance-value">
-                  {isLoadingBalance ? '🔄 加载中...' : `${parseFloat(brBalance).toFixed(6)} BR`}
+                  {isLoadingBalance ? '🔄 加载中...' : `${parseFloat(brBalance).toFixed(6)} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`}
                 </span>
               </div>
               {lastBalanceUpdate && (
@@ -1360,8 +1634,8 @@ const CycleTrading = ({ account, provider, chainId }) => {
                         <>
                           <span>消耗: {record.usdtSpent} USDT</span>
                           <span>回收: {record.usdtReceived} USDT</span>
-                          <span>购买: {record.brBought} BR</span>
-                          <span>卖出: {record.brSold} BR</span>
+                          <span>购买: {record.brBought} {TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}</span>
+                          <span>卖出: {record.brSold} {TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}</span>
                         </>
                       )}
                       <span>时间: {record.timestamp.toLocaleTimeString()}</span>

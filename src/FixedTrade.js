@@ -71,12 +71,12 @@ const FixedTrade = ({ account, provider, chainId }) => {
   // 合约地址
   const CONTRACT_ADDRESS = '0xb300000b72DEAEb607a12d5f54773D1C19c7028d';
   
-  // 代币地址
-  const USDT_ADDRESS = '0x55d398326f99059ff775485246999027b3197955';
-  const BR_ADDRESS = '0xff7d6a96ae471bbcd7713af9cb1feeb16cf56b41';
+  // 代币地址配置（与循环交易保持一致）
+  const TOKEN_A_ADDRESS = '0x55d398326f99059ff775485246999027b3197955'; // USDT（固定的交易对一侧）
+  const TOKEN_B_ADDRESS = '0xff7d6a96ae471bbcd7713af9cb1feeb16cf56b41'; // BR（可变的交易对另一侧，后续支持切换）
   
-  // PancakeSwap V3 地址
-  const V3_POOL_ADDRESS = '0x380aaDF63D84D3A434073F1d5d95f02fB23d5228'; // V3 Pool 合约地址
+  // PancakeSwap V3 池地址（与循环交易保持一致）
+  const POOL_ADDRESS = '0x380aaDF63D84D3A434073F1d5d95f02fB23d5228'; // V3 Pool 合约地址
   
   // V3 查询价格：从 Pool 合约的 slot0 获取 sqrtPriceX96 计算价格
   const getAmountOutV3 = async (usdtAmountInput) => {
@@ -87,7 +87,7 @@ const FixedTrade = ({ account, provider, chainId }) => {
     try {
       console.log('=== 使用PancakeSwap V3 Pool slot0 查询价格 ===');
       console.log('输入USDT数量:', usdtAmountInput);
-      console.log('V3 Pool地址:', V3_POOL_ADDRESS);
+      console.log('V3 Pool地址:', POOL_ADDRESS);
       
       // 调用 slot0() 获取当前价格信息
       // function slot0() external view returns (
@@ -100,7 +100,7 @@ const FixedTrade = ({ account, provider, chainId }) => {
       //   bool unlocked
       // )
       const slot0Result = await provider.call({
-        to: V3_POOL_ADDRESS,
+        to: POOL_ADDRESS,
         data: '0x3850c7bd' // slot0() 方法ID
       });
       
@@ -247,11 +247,11 @@ const FixedTrade = ({ account, provider, chainId }) => {
     try {
       console.log('=== 使用PancakeSwap V3反向查询价格 ===');
       console.log('输入BR数量:', brAmountInput);
-      console.log('V3Pool地址:', V3_POOL_ADDRESS);
+      console.log('V3Pool地址:', POOL_ADDRESS);
       
       // 调用 slot0() 获取当前价格
       const slot0Result = await provider.call({
-        to: V3_POOL_ADDRESS,
+        to: POOL_ADDRESS,
         data: '0x3850c7bd' // slot0() 方法ID
       });
       
@@ -350,7 +350,7 @@ const FixedTrade = ({ account, provider, chainId }) => {
       setIsLoadingBalance(true);
       console.log('=== 获取BR代币余额 ===');
       console.log('用户地址:', account);
-      console.log('BR代币地址:', BR_ADDRESS);
+      console.log('BR代币地址:', TOKEN_B_ADDRESS);
       
       // 构建balanceOf调用数据
       // balanceOf(address) 方法ID: 0x70a08231
@@ -359,7 +359,7 @@ const FixedTrade = ({ account, provider, chainId }) => {
       
       // 调用合约获取余额
       const result = await provider.call({
-        to: BR_ADDRESS,
+        to: TOKEN_B_ADDRESS,
         data: balanceOfData
       });
       
@@ -395,7 +395,7 @@ const FixedTrade = ({ account, provider, chainId }) => {
     try {
       console.log('=== 获取USDT代币余额 ===');
       console.log('用户地址:', account);
-      console.log('USDT代币地址:', USDT_ADDRESS);
+      console.log('USDT代币地址:', TOKEN_A_ADDRESS);
       
       // 构建balanceOf调用数据
       // balanceOf(address) 方法ID: 0x70a08231
@@ -404,7 +404,7 @@ const FixedTrade = ({ account, provider, chainId }) => {
       
       // 调用合约获取余额
       const result = await provider.call({
-        to: USDT_ADDRESS,
+        to: TOKEN_A_ADDRESS,
         data: balanceOfData
       });
       
@@ -481,6 +481,20 @@ const FixedTrade = ({ account, provider, chainId }) => {
 
   // 构建交易数据
   const buildTransactionData = (isUsdtToBr = true) => {
+    // 获取代币地址（去掉0x前缀）
+    const tokenAAddr = TOKEN_A_ADDRESS.slice(2).toLowerCase(); // USDT地址（去掉0x）
+    const tokenBAddr = TOKEN_B_ADDRESS.slice(2).toLowerCase(); // 选中代币地址（去掉0x）
+    
+    // 构建代币地址参数
+    const tokenAParam = '000000000000000000000000' + tokenAAddr; // 32字节对齐的USDT地址
+    const tokenBParam = '000000000000000000000000' + tokenBAddr; // 32字节对齐的选中代币地址
+    
+    // 分割代币地址参数用于参数拼接（基于32字节对齐后的地址参数按照28+4字节分割）
+    const tokenAPart1 = tokenAParam.slice(0, 56); // USDT地址参数的前56字符（前28字节）
+    const tokenAPart2 = tokenAParam.slice(56); // USDT地址参数的后8字符（后4字节）
+    const tokenBPart1 = tokenBParam.slice(0, 56); // 选中代币地址参数的前56字符（前28字节）
+    const tokenBPart2 = tokenBParam.slice(56); // 选中代币地址参数的后8字符（后4字节）
+    
     // 计算时间戳：当前时间 + 2分钟（120秒），使用毫秒时间戳
     const currentTime = Date.now(); // 当前毫秒时间戳
     const deadline = currentTime + (120 * 1000); // 加2分钟（120000毫秒）
@@ -500,6 +514,15 @@ const FixedTrade = ({ account, provider, chainId }) => {
     const brPart1 = brAmountHex.slice(0, 56); // 前28字节（56个十六进制字符）用于参数10后28字节
     const brPart2 = brAmountHex.slice(56, 64); // 后4字节（8个十六进制字符）用于参数11前4字节
     
+    console.log('=== 代币地址分割 ===');
+    console.log('tokenAAddr (原始地址):', tokenAAddr);
+    console.log('tokenBAddr (原始地址):', tokenBAddr);
+    console.log('tokenAParam (32字节对齐):', tokenAParam);
+    console.log('tokenBParam (32字节对齐):', tokenBParam);
+    console.log('tokenAPart1 (前56字符/28字节):', tokenAPart1);
+    console.log('tokenAPart2 (后8字符/4字节):', tokenAPart2);
+    console.log('tokenBPart1 (前56字符/28字节):', tokenBPart1);
+    console.log('tokenBPart2 (后8字符/4字节):', tokenBPart2);
     console.log('当前毫秒时间戳:', currentTime);
     console.log('截止毫秒时间戳:', deadline);
     console.log('截止时间十六进制:', deadlineHex);
@@ -535,16 +558,16 @@ const FixedTrade = ({ account, provider, chainId }) => {
       // USDT -> BR 交易参数
       params = [
         '0000000000000000000000005efc784d444126ecc05f22c49ff3fbd7d9f4868a', // 参数0
-        '00000000000000000000000055d398326f99059ff775485246999027b3197955', // 参数1
+        tokenAParam, // 参数1: USDT地址
         usdtAmountHex, // 参数2: USDT数量
-        '000000000000000000000000ff7d6a96ae471bbcd7713af9cb1feeb16cf56b41', // 参数3
-        brAmountHex, // 参数4: BR数量
+        tokenBParam, // 参数3: 选中代币地址
+        brAmountHex, // 参数4: 选中代币数量
         '00000000000000000000000000000000000000000000000000000000000000c0', // 参数5
         '0000000000000000000000000000000000000000000000000000000000000404', // 参数6
         '9aa9035600000000000000000000000000000000000000000000000000000000', // 参数7
-        '0000000000000000000000000000000055d398326f99059ff775485246999027', // 参数8
-        'b3197955000000000000000000000000ff7d6a96ae471bbcd7713af9cb1feeb1', // 参数9
-        '6cf56b41' + brPart1, // 参数10: 前4字节固定 + 后28字节BR数量
+        '0000000000000000000000000000000' + tokenAAddr, // 参数8: USDT地址
+        tokenAPart2 + '000000000000000000000000' + tokenBPart1, // 参数9: USDT地址后4字节 + 选中代币地址前28字节
+        tokenBPart2 + brPart1, // 参数10: 选中代币地址后4字节 + 后28字节选中代币数量
         brPart2 + timestampPart1, // 参数11: 前4字节BR数量 + 后28字节时间戳
         timestampPart2 + '00000000000000000000000000000000000000000000000000000000', // 参数12: 前4字节时间戳 + 后28字节固定
         '0000010000000000000000000000000000000000000000000000000000000000', // 参数13
@@ -559,8 +582,8 @@ const FixedTrade = ({ account, provider, chainId }) => {
         '000000a000000000000000000000000000000000000000000000000000000000', // 参数22
         '000000e000000000000000000000000000000000000000000000000000000000', // 参数23
         '0000012000000000000000000000000000000000000000000000000000000000', // 参数24
-        '0000016000000000000000000000000055d398326f99059ff775485246999027', // 参数25
-        'b319795500000000000000000000000000000000000000000000000000000000', // 参数26
+        '0000016000000000000000000000000' + tokenAAddr, // 参数25: 固定前缀 + USDT地址
+        tokenAPart2 + '00000000000000000000000000000000000000000000000000000000', // 参数26: USDT地址后4字节 + 固定后缀
         '0000000102000000000000000000000000000000000000000000000000000000', // 参数27
         '0000000000000000000000000000000000000000000000000000000000000000', // 参数28
         '000000010000000000000000000000005efc784d444126ecc05f22c49ff3fbd7', // 参数29
@@ -570,25 +593,25 @@ const FixedTrade = ({ account, provider, chainId }) => {
         '0000000100000000000000000000000000000000000000000000000000000000', // 参数33
         '0000002000000000000000000000000000000000000000000000000000000000', // 参数34
         '0000008000000000000000000000000000000000000000000000000000000000', // 参数35
-        '0000000000000000000000000000000055d398326f99059ff775485246999027', // 参数36
-        'b3197955000000000000000000000000ff7d6a96ae471bbcd7713af9cb1feeb1', // 参数37
-        '6cf56b4100000000000000000000000000000000000000000000000000000000', // 参数38
+        '0000000000000000000000000000000' + tokenAAddr, // 参数36: 固定前缀 + USDT地址
+        tokenAPart2 + '000000000000000000000000' + tokenBPart1, // 参数37: USDT地址后4字节 + 选中代币地址前28字节
+        tokenBPart2 + '00000000000000000000000000000000000000000000000000000000', // 参数38: 选中代币地址后4字节 + 固定后缀
         '0000006400000000000000000000000000000000000000000000000000000000'  // 参数39
       ];
     } else {
-      // BR -> USDT 交易参数 (复制USDT->BR的参数作为模板，你可以修改)
+      // BR -> USDT 交易参数（代币方向相反）
       params = [
         '0000000000000000000000005efc784d444126ecc05f22c49ff3fbd7d9f4868a', // 参数0
-        '000000000000000000000000ff7d6a96ae471bbcd7713af9cb1feeb16cf56b41', // 参数1
-        brAmountHex, // 参数2: USDT数量
-        '00000000000000000000000055d398326f99059ff775485246999027b3197955', // 参数3
-        usdtAmountHex, // 参数4: BR数量
+        tokenBParam, // 参数1: 选中代币地址
+        brAmountHex, // 参数2: 选中代币数量
+        tokenAParam, // 参数3: USDT地址
+        usdtAmountHex, // 参数4: USDT数量
         '00000000000000000000000000000000000000000000000000000000000000c0', // 参数5
         '0000000000000000000000000000000000000000000000000000000000000404', // 参数6
         '9aa9035600000000000000000000000000000000000000000000000000000000', // 参数7
-        '00000000000000000000000000000000ff7d6a96ae471bbcd7713af9cb1feeb1', // 参数8
-        '6cf56b4100000000000000000000000055d398326f99059ff775485246999027', // 参数9
-        'b3197955' + usdtPart1, // 参数10: 前4字节固定 + 后28字节BR数量
+        '00000000000000000000000000000000' + tokenBAddr, // 参数8: 选中代币地址
+        tokenBPart2 + '000000000000000000000000' + tokenAPart1, // 参数9: 选中代币地址后4字节 + USDT地址前28字节
+        tokenAPart2 + usdtPart1, // 参数10: USDT地址后4字节 + 后28字节USDT数量
         usdtPart2 + timestampPart1, // 参数11: 前4字节BR数量 + 后28字节时间戳
         timestampPart2 + '00000000000000000000000000000000000000000000000000000000', // 参数12: 前4字节时间戳 + 后28字节固定
         '0000010000000000000000000000000000000000000000000000000000000000', // 参数13
@@ -603,8 +626,8 @@ const FixedTrade = ({ account, provider, chainId }) => {
         '000000a000000000000000000000000000000000000000000000000000000000', // 参数22
         '000000e000000000000000000000000000000000000000000000000000000000', // 参数23
         '0000012000000000000000000000000000000000000000000000000000000000', // 参数24
-        '00000160000000000000000000000000ff7d6a96ae471bbcd7713af9cb1feeb1', // 参数25
-        '6cf56b4100000000000000000000000000000000000000000000000000000000', // 参数26
+        '00000160000000000000000000000000' + tokenBAddr, // 参数25: 固定前缀 + 选中代币地址
+        tokenBPart2 + '00000000000000000000000000000000000000000000000000000000', // 参数26: 选中代币地址后4字节 + 固定后缀
         '0000000102000000000000000000000000000000000000000000000000000000', // 参数27
         '0000000000000000000000000000000000000000000000000000000000000000', // 参数28
         '000000010000000000000000000000005efc784d444126ecc05f22c49ff3fbd7', // 参数29
@@ -614,16 +637,16 @@ const FixedTrade = ({ account, provider, chainId }) => {
         '0000000100000000000000000000000000000000000000000000000000000000', // 参数33
         '0000002000000000000000000000000000000000000000000000000000000000', // 参数34
         '0000008000000000000000000000000000000000000000000000000000000000', // 参数35
-        '00000000000000000000000000000000ff7d6a96ae471bbcd7713af9cb1feeb1', // 参数36
-        '6cf56b4100000000000000000000000055d398326f99059ff775485246999027', // 参数37
-        'b319795500000000000000000000000000000000000000000000000000000000', // 参数38
+        '00000000000000000000000000000000' + tokenBAddr, // 参数36: 固定前缀 + 选中代币地址
+        tokenBPart2 + '000000000000000000000000' + tokenAPart1, // 参数37: 选中代币地址后4字节 + USDT地址前28字节
+        tokenAPart2 + '00000000000000000000000000000000000000000000000000000000', // 参数38: USDT地址后4字节 + 固定后缀
         '0000006400000000000000000000000000000000000000000000000000000000'  // 参数39
       ];
     }
     
-    console.log('=== 交易类型 ===');
-    console.log('交易方向:', isUsdtToBr ? 'USDT -> BR' : 'BR -> USDT');
-    console.log('使用的参数数组:', isUsdtToBr ? 'USDT->BR参数' : 'BR->USDT参数');
+    console.log('=== 固定交易类型 ===');
+    console.log('交易方向:', isUsdtToBr ? 'USDT -> 选中代币' : '选中代币 -> USDT');
+    console.log('使用的参数数组:', isUsdtToBr ? 'USDT->选中代币参数' : '选中代币->USDT参数');
 
     // 打印完整的参数数组
     console.log('=== 完整参数数组 ===');
