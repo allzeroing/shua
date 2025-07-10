@@ -17,6 +17,7 @@ const CycleTrading = ({ account, provider, chainId }) => {
   const [debugLogs, setDebugLogs] = useState([]); // 调试日志
   const [showDebugLogs, setShowDebugLogs] = useState(false); // 是否显示调试日志
   const [errorModal, setErrorModal] = useState({ show: false, title: '', message: '', logs: [] }); // 错误弹窗
+  const [confirmModal, setConfirmModal] = useState({ show: false, title: '', message: '', onConfirm: null, onCancel: null }); // 确认弹窗
   const shouldStopRef = useRef(false); // 用于控制是否停止循环
 
   // 合约地址
@@ -90,6 +91,32 @@ const CycleTrading = ({ account, provider, chainId }) => {
   // 关闭错误弹窗
   const closeErrorModal = () => {
     setErrorModal({ show: false, title: '', message: '', logs: [] });
+  };
+
+  // 显示确认弹窗
+  const showConfirmModal = (title, message) => {
+    return new Promise((resolve) => {
+      console.log('🔔 showConfirmModal 被调用:', { title, message });
+      addDebugLog(`🔔 显示确认弹窗: ${title}`, 'info');
+      
+      setConfirmModal({
+        show: true,
+        title,
+        message,
+        onConfirm: () => {
+          console.log('✅ 用户点击确认');
+          addDebugLog('✅ 用户点击确认', 'success');
+          setConfirmModal({ show: false, title: '', message: '', onConfirm: null, onCancel: null });
+          resolve(true);
+        },
+        onCancel: () => {
+          console.log('❌ 用户点击取消');
+          addDebugLog('❌ 用户点击取消', 'warning');
+          setConfirmModal({ show: false, title: '', message: '', onConfirm: null, onCancel: null });
+          resolve(false);
+        }
+      });
+    });
   };
 
   // 自动获取代币余额
@@ -984,18 +1011,13 @@ const CycleTrading = ({ account, provider, chainId }) => {
       return;
     }
     
-    const confirmMessage = `确认开始循环交易:\n` +
-      `循环次数: ${cycleCount} 次\n` +
-      `每次USDT数量: ${parseFloat(usdtAmountPerCycle).toFixed(6)} USDT\n` +
-      `总计需要: ${totalUsdtNeeded.toFixed(6)} USDT\n` +
-      `当前余额: ${parseFloat(usdtBalance).toFixed(6)} USDT\n` +
-      `是否确认开始？`;
+    const confirmMessage = `循环次数: ${cycleCount} 次\n每次USDT数量: ${parseFloat(usdtAmountPerCycle).toFixed(6)} USDT\n总计需要: ${totalUsdtNeeded.toFixed(6)} USDT\n当前余额: ${parseFloat(usdtBalance).toFixed(6)} USDT`;
     
-    console.log('🔔 即将显示确认窗口');
+    console.log('🔔 即将显示自定义确认窗口');
     console.log('确认消息:', confirmMessage);
-    addDebugLog('🔔 显示确认窗口', 'info');
+    addDebugLog('🔔 显示自定义确认窗口', 'info');
     
-    const userConfirmed = window.confirm(confirmMessage);
+    const userConfirmed = await showConfirmModal('确认开始循环交易', confirmMessage);
     console.log('用户确认结果:', userConfirmed);
     addDebugLog(`用户确认结果: ${userConfirmed}`, userConfirmed ? 'success' : 'warning');
     
@@ -1444,6 +1466,36 @@ const CycleTrading = ({ account, provider, chainId }) => {
                 查看完整日志
               </button>
               <button className="error-modal-ok" onClick={closeErrorModal}>确定</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 确认弹窗 */}
+      {confirmModal.show && (
+        <div className="confirm-modal-overlay" onClick={confirmModal.onCancel}>
+          <div className="confirm-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-modal-header">
+              <h3>❓ {confirmModal.title}</h3>
+            </div>
+            
+            <div className="confirm-modal-body">
+              <div className="confirm-message">
+                {confirmModal.message.split('\n').map((line, index) => (
+                  <div key={index} className="confirm-message-line">
+                    {line}
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <div className="confirm-modal-footer">
+              <button className="confirm-modal-cancel" onClick={confirmModal.onCancel}>
+                取消
+              </button>
+              <button className="confirm-modal-ok" onClick={confirmModal.onConfirm}>
+                确认开始
+              </button>
             </div>
           </div>
         </div>
