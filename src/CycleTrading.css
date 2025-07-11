@@ -380,6 +380,15 @@ select.param-input-field option:checked {
   font-weight: bold;
 }
 
+/* 滑点样式 */
+.slippage-positive {
+  color: #4caf50;
+}
+
+.slippage-negative {
+  color: #ff9800;
+}
+
 /* 循环历史 */
 .cycle-history {
   background: linear-gradient(135deg, #9c27b0 0%, #e91e63 100%);

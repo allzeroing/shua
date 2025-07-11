@@ -19,6 +19,9 @@ const CycleTrading = ({ account, provider, chainId }) => {
   const [errorModal, setErrorModal] = useState({ show: false, title: '', message: '', logs: [] }); // 错误弹窗
   const [confirmModal, setConfirmModal] = useState({ show: false, title: '', message: '', onConfirm: null, onCancel: null }); // 确认弹窗
   const shouldStopRef = useRef(false); // 用于控制是否停止循环
+  
+  // 统计信息状态
+  const [totalActualUsdtReceived, setTotalActualUsdtReceived] = useState(0); // 累计实际收到的USDT总量
 
   // 合约地址
   const CONTRACT_ADDRESS = '0xb300000b72DEAEb607a12d5f54773D1C19c7028d';
@@ -62,9 +65,9 @@ const CycleTrading = ({ account, provider, chainId }) => {
 
   // 版本信息配置 - 发布时手动更新
   const VERSION_INFO = {
-    version: "v1.0.0",
-    buildTime: "2025-07-11 10:30:00",
-    gitHash: "main-002",
+    version: "v1.1.0",
+    buildTime: "2025-07-11 11:00:00",
+    gitHash: "main-003",
     description: "Alpha刷分工具"
   };
   
@@ -1312,15 +1315,24 @@ const CycleTrading = ({ account, provider, chainId }) => {
       // 等待USDT余额更新
       const expectedUsdtBalanceAfterSell = parseFloat(usdtBalanceBeforeSell) + parseFloat(minUSDTAmount) * 0.8; // 预期的80%作为最小值
       setCycleStatus(`第 ${cycleIndex} 次循环：等待USDT余额更新...`);
-      await waitForBalanceUpdate(
+      const currentUsdtBalance = await waitForBalanceUpdate(
         getUSDTBalance,
         expectedUsdtBalanceAfterSell,
         'USDT余额'
       );
       
+      // 计算实际收到的USDT数量
+      const actualUsdtReceived = parseFloat(currentUsdtBalance) - parseFloat(usdtBalanceBeforeSell);
+      
+      addDebugLog(`📊 第 ${cycleIndex} 次循环卖出${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}统计:`, 'info');
+      addDebugLog(`  卖出前USDT余额: ${usdtBalanceBeforeSell} USDT`, 'info');
+      addDebugLog(`  卖出后USDT余额: ${parseFloat(currentUsdtBalance)} USDT`, 'info');
+      addDebugLog(`  实际收到: ${actualUsdtReceived} USDT`, 'info');
+      addDebugLog(`  预期收到: ${parseFloat(expectedUSDTAmount)} USDT`, 'info');
+      
       // 计算本次循环的USDT消耗和回收
       const usdtSpent = parseFloat(usdtAmountPerCycle);
-      const usdtReceived = parseFloat(expectedUSDTAmount); // 预期收到的USDT数量
+      const usdtReceived = actualUsdtReceived; // 使用实际收到的USDT数量
       const usdtDifference = usdtReceived - usdtSpent;
       
       // 记录历史
@@ -1333,10 +1345,25 @@ const CycleTrading = ({ account, provider, chainId }) => {
         brSold: actualBrBought.toFixed(8),   // 使用实际卖出的BR数量（与购买数量相同）
         buyTx: buyReceipt.transactionHash,
         sellTx: sellReceipt.transactionHash,
-        timestamp: new Date()
+        timestamp: new Date(),
+        // 添加详细的统计信息
+        expectedUsdtReceived: parseFloat(expectedUSDTAmount).toFixed(6), // 预期收到的USDT
+        actualUsdtReceived: actualUsdtReceived.toFixed(6), // 实际收到的USDT
+        usdtBalanceBeforeSell: parseFloat(usdtBalanceBeforeSell).toFixed(6), // 卖出前USDT余额
+        usdtBalanceAfterSell: parseFloat(currentUsdtBalance).toFixed(6), // 卖出后USDT余额
+        slippage: ((actualUsdtReceived - parseFloat(expectedUSDTAmount)) / parseFloat(expectedUSDTAmount) * 100).toFixed(4) // 滑点百分比
       };
       
       setCycleHistory(prev => [...prev, cycleRecord]);
+      
+      // 更新累计实际收到的USDT总量
+      setTotalActualUsdtReceived(prev => prev + actualUsdtReceived);
+      
+      addDebugLog(`📊 第 ${cycleIndex} 次循环完成汇总:`, 'success');
+      addDebugLog(`  本次消耗: ${usdtSpent.toFixed(6)} USDT`, 'info');
+      addDebugLog(`  本次实际收到: ${actualUsdtReceived.toFixed(6)} USDT`, 'info');
+      addDebugLog(`  本次净差额: ${usdtDifference.toFixed(6)} USDT`, usdtDifference >= 0 ? 'success' : 'warning');
+      addDebugLog(`  滑点: ${cycleRecord.slippage}%`, 'info');
       
       // 刷新余额显示
       await refreshAllBalances();
@@ -1469,6 +1496,7 @@ const CycleTrading = ({ account, provider, chainId }) => {
     setCurrentCycle(0);
     setCycleHistory([]);
     shouldStopRef.current = false; // 重置停止标志
+    setTotalActualUsdtReceived(0); // 重置累计实际收到的USDT总量
     
     console.log('✅ 循环交易状态已设置，进入主循环逻辑...');
     addDebugLog('✅ 循环交易状态已设置，进入主循环逻辑...', 'success');
@@ -1576,6 +1604,20 @@ const CycleTrading = ({ account, provider, chainId }) => {
         setCycleStatus(`循环交易完成！成功 ${successfulCycles}/${totalAttempted} 次，失败 ${totalAttempted - successfulCycles} 次`);
         addDebugLog(`🎉 循环交易全部完成！`, 'success');
         addDebugLog(`📊 统计结果: 成功 ${successfulCycles} 次，失败 ${totalAttempted - successfulCycles} 次`, 'success');
+      }
+      
+      // 添加最终统计信息
+      if (cycleHistory.length > 0) {
+        const successfulCycles = cycleHistory.filter(record => !record.error);
+        const totalSpent = successfulCycles.reduce((sum, record) => sum + parseFloat(record.usdtSpent || 0), 0);
+        const totalReceived = successfulCycles.reduce((sum, record) => sum + parseFloat(record.actualUsdtReceived || record.usdtReceived || 0), 0);
+        const totalDifference = totalReceived - totalSpent;
+        
+        addDebugLog(`📊 最终统计汇总:`, 'success');
+        addDebugLog(`  总消耗: ${totalSpent.toFixed(6)} USDT`, 'info');
+        addDebugLog(`  总实际收到: ${totalActualUsdtReceived.toFixed(6)} USDT`, 'info');
+        addDebugLog(`  净差额: ${totalDifference.toFixed(6)} USDT`, totalDifference >= 0 ? 'success' : 'warning');
+        addDebugLog(`  平均每次: ${successfulCycles.length > 0 ? (totalDifference / successfulCycles.length).toFixed(6) : '0.000000'} USDT`, 'info');
       }
       
     } catch (error) {
@@ -1757,10 +1799,20 @@ const CycleTrading = ({ account, provider, chainId }) => {
               {(() => {
                 const successfulCycles = cycleHistory.filter(record => !record.error);
                 const totalSpent = successfulCycles.reduce((sum, record) => sum + parseFloat(record.usdtSpent || 0), 0);
-                const totalReceived = successfulCycles.reduce((sum, record) => sum + parseFloat(record.usdtReceived || 0), 0);
+                // 优先使用实际收到的USDT数量，如果没有则使用原来的usdtReceived
+                const totalReceived = successfulCycles.reduce((sum, record) => sum + parseFloat(record.actualUsdtReceived || record.usdtReceived || 0), 0);
                 const totalDifference = totalReceived - totalSpent;
                 const successCount = successfulCycles.length;
                 const failedCount = cycleHistory.filter(record => record.error).length;
+                
+                // 计算总滑点
+                const totalSlippage = successfulCycles.reduce((sum, record) => {
+                  if (record.slippage) {
+                    return sum + parseFloat(record.slippage);
+                  }
+                  return sum;
+                }, 0);
+                const averageSlippage = successCount > 0 ? (totalSlippage / successCount).toFixed(4) : '0.0000';
                 
                 return (
                   <div className="cycle-summary">
@@ -1783,6 +1835,10 @@ const CycleTrading = ({ account, provider, chainId }) => {
                         <span className="summary-value received">{totalReceived.toFixed(6)} USDT</span>
                       </div>
                       <div className="summary-item">
+                        <span>实际收到:</span>
+                        <span className="summary-value received">{totalActualUsdtReceived.toFixed(6)} USDT</span>
+                      </div>
+                      <div className="summary-item">
                         <span>净差额:</span>
                         <span className={`summary-value ${totalDifference >= 0 ? 'profit-positive' : 'profit-negative'}`}>
                           {totalDifference >= 0 ? '+' : ''}{totalDifference.toFixed(6)} USDT
@@ -1792,6 +1848,12 @@ const CycleTrading = ({ account, provider, chainId }) => {
                         <span>平均每次:</span>
                         <span className={`summary-value ${successCount > 0 ? (totalDifference/successCount >= 0 ? 'profit-positive' : 'profit-negative') : ''}`}>
                           {successCount > 0 ? (totalDifference >= 0 ? '+' : '') + (totalDifference/successCount).toFixed(6) + ' USDT' : '无数据'}
+                        </span>
+                      </div>
+                      <div className="summary-item">
+                        <span>平均滑点:</span>
+                        <span className={`summary-value ${parseFloat(averageSlippage) >= 0 ? 'slippage-positive' : 'slippage-negative'}`}>
+                          {averageSlippage}%
                         </span>
                       </div>
                     </div>
@@ -1818,7 +1880,15 @@ const CycleTrading = ({ account, provider, chainId }) => {
                       ) : (
                         <>
                           <span>消耗: {record.usdtSpent} USDT</span>
-                          <span>回收: {record.usdtReceived} USDT</span>
+                          <span>实际收到: {record.actualUsdtReceived || record.usdtReceived} USDT</span>
+                          {record.expectedUsdtReceived && record.actualUsdtReceived && (
+                            <span>预期收到: {record.expectedUsdtReceived} USDT</span>
+                          )}
+                          {record.slippage && (
+                            <span className={parseFloat(record.slippage) >= 0 ? 'slippage-positive' : 'slippage-negative'}>
+                              滑点: {record.slippage}%
+                            </span>
+                          )}
                           <span>购买: {record.brBought} {TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}</span>
                           <span>卖出: {record.brSold} {TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}</span>
                         </>
