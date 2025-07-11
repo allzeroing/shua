@@ -65,9 +65,9 @@ const CycleTrading = ({ account, provider, chainId }) => {
 
   // 版本信息配置 - 发布时手动更新
   const VERSION_INFO = {
-    version: "v1.1.1",
-    buildTime: "2025-07-11 11:15:00",
-    gitHash: "main-004",
+    version: "v1.1.2",
+    buildTime: "2025-07-11 11:30:00",
+    gitHash: "main-005",
     description: "Alpha刷分工具"
   };
   
@@ -265,32 +265,29 @@ const CycleTrading = ({ account, provider, chainId }) => {
       addDebugLog('🔍 页面加载，开始验证钱包连接...', 'info');
       
       const validateConnection = async () => {
-        // 延迟一小段时间，确保组件完全加载
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        const isConnected = await checkAndReconnectWallet();
-        
-        if (isConnected) {
-          addDebugLog('✅ 钱包连接验证通过，开始获取余额...', 'success');
-          // 延迟一小段时间再获取余额，确保连接稳定
-          setTimeout(() => {
-            refreshAllBalances();
-          }, 1000);
-        } else {
-          addDebugLog('⚠️ 钱包连接验证失败，请检查钱包状态', 'warning');
-          addDebugLog('💡 建议：请确保MetaMask已连接并且账户正确', 'info');
+        try {
+          // 延迟一小段时间，确保组件完全加载
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          const isConnected = await checkAndReconnectWallet();
+          
+          if (isConnected) {
+            addDebugLog('✅ 钱包连接验证通过，开始获取余额...', 'success');
+            // 延迟一小段时间再获取余额，确保连接稳定
+            setTimeout(() => {
+              refreshAllBalances();
+            }, 1000);
+          } else {
+            addDebugLog('⚠️ 钱包连接验证失败，请检查钱包状态', 'warning');
+            addDebugLog('💡 建议：请确保MetaMask已连接并且账户正确', 'info');
+          }
+        } catch (error) {
+          addDebugLog(`❌ 钱包连接验证异常: ${error.message}`, 'error');
+          console.error('钱包连接验证异常:', error);
         }
       };
       
       validateConnection();
-    }
-  }, [account, provider]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // 自动获取代币余额
-  useEffect(() => {
-    if (account && provider) {
-      console.log('钱包已连接，自动获取代币余额...');
-      refreshAllBalances();
     }
   }, [account, provider]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -621,8 +618,9 @@ const CycleTrading = ({ account, provider, chainId }) => {
       
       console.log('USDT余额查询结果 (原始):', result);
       
+      // USDT通常是6位小数，但有些实现可能是18位，先尝试18位
       const balanceInEther = ethers.formatEther(result);
-      console.log('USDT余额 (格式化):', balanceInEther);
+      console.log('USDT余额 (18位小数格式化):', balanceInEther);
       
       setUsdtBalance(balanceInEther);
       addDebugLog(`✅ USDT余额: ${balanceInEther}`, 'success');
@@ -689,10 +687,7 @@ const CycleTrading = ({ account, provider, chainId }) => {
         return ['0', '0'];
       }
     } finally {
-      // 只有在最后一次重试时才设置加载状态为false
-      if (retryCount === 0) {
-        setIsLoadingBalance(false);
-      }
+      setIsLoadingBalance(false);
     }
   };
 
