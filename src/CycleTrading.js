@@ -59,15 +59,15 @@ const CycleTrading = ({ account, provider, chainId }) => {
   
   // 页面文案配置
   const PAGE_CONFIG = {
-    description: "选择你要刷量的币种，输入需要刷几次，每次刷多少USDT，典型的15分，需要循环16次，每次1025 USDT，会自动拉起钱包，按确定并扫脸即可完成。推荐quq，会自动返还部分手续费！",
+    description: "选择你要刷量的币种，输入每次刷多少USDT，输入需要刷几次，例如要刷15分，每次1025 USDT时，需要循环16次，会自动拉起钱包，按确定并扫脸即可完成。推荐quq，会自动返还部分手续费！",
     disclaimer: "⚠️ 免责声明：本工具为免费提供，仅供学习和研究使用。数字货币交易存在风险，我们不承担因使用本工具而造成的任何损失或后果。使用本产品即代表您已阅读并同意该免责协议。请谨慎操作，理性投资。"
   };
 
   // 版本信息配置 - 发布时手动更新
   const VERSION_INFO = {
-    version: "v1.1.0",
-    buildTime: "2025-07-11 11:00:00",
-    gitHash: "main-003",
+    version: "v1.1.1",
+    buildTime: "2025-07-11 11:15:00",
+    gitHash: "main-004",
     description: "Alpha刷分工具"
   };
   
@@ -1700,20 +1700,6 @@ const CycleTrading = ({ account, provider, chainId }) => {
             </div>
             
             <div className="param-input">
-              <label>循环次数:</label>
-              <input
-                type="number"
-                value={cycleCount}
-                onChange={(e) => setCycleCount(e.target.value)}
-                placeholder="请输入循环次数"
-                min="1"
-                max="100"
-                disabled={isCycling}
-                className="param-input-field"
-              />
-            </div>
-            
-            <div className="param-input">
               <label>每次USDT数量:</label>
               <input
                 type="number"
@@ -1722,6 +1708,20 @@ const CycleTrading = ({ account, provider, chainId }) => {
                 placeholder="请输入每次使用的USDT数量"
                 step="0.000001"
                 min="0"
+                disabled={isCycling}
+                className="param-input-field"
+              />
+            </div>
+            
+            <div className="param-input">
+              <label>循环次数:</label>
+              <input
+                type="number"
+                value={cycleCount}
+                onChange={(e) => setCycleCount(e.target.value)}
+                placeholder="请输入循环次数"
+                min="1"
+                max="100"
                 disabled={isCycling}
                 className="param-input-field"
               />
