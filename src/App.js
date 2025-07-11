@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
-import FixedTrade from './FixedTrade';
 import CycleTrading from './CycleTrading';
 import './App.css';
 
@@ -20,6 +19,13 @@ function App() {
   useEffect(() => {
     accountRef.current = account;
   }, [account]);
+
+  // 检查当前页面，如果是已隐藏的固定交易页面，自动切换到钱包页面
+  useEffect(() => {
+    if (currentPage === 'fixed') {
+      setCurrentPage('wallet');
+    }
+  }, [currentPage]);
 
   // BSC主网配置
   const BSC_MAINNET = {
@@ -388,14 +394,6 @@ function App() {
           🔗 钱包连接
         </button>
         <button 
-          className={`nav-button ${currentPage === 'fixed' ? 'active' : ''}`}
-          onClick={() => setCurrentPage('fixed')}
-          disabled={!account}
-          title={!account ? '请先连接钱包' : ''}
-        >
-          ⚡ 固定交易
-        </button>
-        <button 
           className={`nav-button ${currentPage === 'cycle' ? 'active' : ''}`}
           onClick={() => setCurrentPage('cycle')}
           disabled={!account}
@@ -498,11 +496,12 @@ function App() {
           <li>✅ BSC主网钱包连接</li>
           <li>✅ 自动网络检测和切换</li>
           <li>✅ 实时余额显示</li>
-          <li>✅ USDT/BR固定交易功能</li>
           <li>✅ 自动循环交易功能</li>
+          <li>✅ 多代币支持 (quq, KOGE, BR)</li>
           <li>✅ 智能价格计算</li>
           <li>✅ PancakeSwap V3 集成</li>
           <li>✅ 交易历史记录</li>
+          <li>✅ 钱包连接自动检查</li>
         </ul>
       </div>
     </div>
@@ -510,16 +509,7 @@ function App() {
 
 
 
-  // 渲染固定交易页面
-  const renderFixedTradePage = () => (
-    <div className="page-content">
-      <FixedTrade 
-        account={account}
-        provider={provider}
-        chainId={chainId}
-      />
-    </div>
-  );
+
 
   // 渲染循环交易页面
   const renderCycleTradingPage = () => (
@@ -537,7 +527,6 @@ function App() {
       {renderNavigation()}
       <main className="main-content">
         {currentPage === 'wallet' && renderWalletPage()}
-        {currentPage === 'fixed' && renderFixedTradePage()}
         {currentPage === 'cycle' && renderCycleTradingPage()}
       </main>
     </div>

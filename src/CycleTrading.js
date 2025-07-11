@@ -54,6 +54,12 @@ const CycleTrading = ({ account, provider, chainId }) => {
   // 当前选中的代币（默认为quq，后续可通过UI切换）
   const [selectedToken, setSelectedToken] = useState('quq');
   
+  // 页面文案配置
+  const PAGE_CONFIG = {
+    description: "选择你要刷量的币种，输入需要刷几次，每次刷多少USDT，典型的15分，需要循环16次，每次1025 USDT，会自动拉起钱包，按确定并扫脸即可完成。推荐quq，会自动返还部分手续费！",
+    disclaimer: "⚠️ 免责声明：本工具为免费提供，仅供学习和研究使用。数字货币交易存在风险，我们不承担因使用本工具而造成的任何损失或后果。使用本产品即代表您已阅读并同意该免责协议。请谨慎操作，理性投资。"
+  };
+  
   // 基础配置
   const TOKEN_A_ADDRESS = '0x55d398326f99059ff775485246999027b3197955'; // USDT（固定）
   const TOKEN_B_ADDRESS = TOKEN_CONFIGS[selectedToken]?.address || '请填写代币地址'; // 选中的代币地址
@@ -147,6 +153,127 @@ const CycleTrading = ({ account, provider, chainId }) => {
       });
     });
   };
+
+  // 钱包连接检查和自动重连函数
+  const checkAndReconnectWallet = async () => {
+    if (!window.ethereum) {
+      addDebugLog('❌ MetaMask未安装', 'error');
+      return false;
+    }
+
+    try {
+      addDebugLog('🔍 开始检查钱包连接状态...', 'info');
+      
+      // 1. 检查是否有已连接的账户
+      const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+      
+      if (accounts.length === 0) {
+        addDebugLog('❌ 未检测到已连接的账户，尝试自动重连...', 'warning');
+        return await autoReconnectWallet();
+      }
+      
+      // 2. 检查账户是否与传入的account一致
+      if (accounts[0].toLowerCase() !== account.toLowerCase()) {
+        addDebugLog(`⚠️ 账户不匹配: 当前${accounts[0]} vs 传入${account}，尝试重连...`, 'warning');
+        return await autoReconnectWallet();
+      }
+      
+      // 3. 检查provider是否可用
+      if (!provider) {
+        addDebugLog('❌ Provider未初始化，尝试重连...', 'error');
+        return await autoReconnectWallet();
+      }
+      
+      // 4. 测试provider连接
+      try {
+        const network = await provider.getNetwork();
+        addDebugLog(`✅ 网络连接正常: ${network.name} (${network.chainId})`, 'success');
+        
+        // 5. 测试基本的合约调用
+        const testBalance = await provider.getBalance(account);
+        addDebugLog(`✅ 账户余额查询成功: ${ethers.formatEther(testBalance)} BNB`, 'success');
+        
+        addDebugLog('✅ 钱包连接检查通过', 'success');
+        return true;
+        
+      } catch (providerError) {
+        addDebugLog(`❌ Provider连接测试失败: ${providerError.message}，尝试重连...`, 'error');
+        return await autoReconnectWallet();
+      }
+      
+    } catch (error) {
+      addDebugLog(`❌ 钱包连接检查失败: ${error.message}，尝试重连...`, 'error');
+      return await autoReconnectWallet();
+    }
+  };
+
+  // 自动重新连接钱包
+  const autoReconnectWallet = async () => {
+    if (!window.ethereum) {
+      addDebugLog('❌ MetaMask未安装，无法自动重连', 'error');
+      return false;
+    }
+
+    try {
+      addDebugLog('🔄 开始自动重新连接钱包...', 'info');
+      
+      // 1. 静默请求已连接的账户（不会弹出连接弹窗）
+      const accounts = await window.ethereum.request({ 
+        method: 'eth_accounts' 
+      });
+      
+      if (accounts.length === 0) {
+        addDebugLog('⚠️ 没有已连接的账户，需要用户手动连接', 'warning');
+        return false;
+      }
+      
+      addDebugLog(`✅ 找到已连接账户: ${accounts[0]}`, 'success');
+      
+      // 2. 等待一小段时间确保连接稳定
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // 3. 再次验证连接
+      const recheckAccounts = await window.ethereum.request({ method: 'eth_accounts' });
+      if (recheckAccounts.length > 0) {
+        addDebugLog('✅ 钱包自动重连成功', 'success');
+        return true;
+      } else {
+        addDebugLog('❌ 钱包自动重连后验证失败', 'error');
+        return false;
+      }
+      
+    } catch (error) {
+      addDebugLog(`❌ 自动重连失败: ${error.message}`, 'error');
+      return false;
+    }
+  };
+
+  // 进入页面时的钱包连接检查
+  useEffect(() => {
+    if (account && provider) {
+      addDebugLog('🔍 页面加载，开始验证钱包连接...', 'info');
+      
+      const validateConnection = async () => {
+        // 延迟一小段时间，确保组件完全加载
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        const isConnected = await checkAndReconnectWallet();
+        
+        if (isConnected) {
+          addDebugLog('✅ 钱包连接验证通过，开始获取余额...', 'success');
+          // 延迟一小段时间再获取余额，确保连接稳定
+          setTimeout(() => {
+            refreshAllBalances();
+          }, 1000);
+        } else {
+          addDebugLog('⚠️ 钱包连接验证失败，请检查钱包状态', 'warning');
+          addDebugLog('💡 建议：请确保MetaMask已连接并且账户正确', 'info');
+        }
+      };
+      
+      validateConnection();
+    }
+  }, [account, provider]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 自动获取代币余额
   useEffect(() => {
@@ -505,11 +632,22 @@ const CycleTrading = ({ account, provider, chainId }) => {
   };
 
   // 刷新所有代币余额
-  const refreshAllBalances = async () => {
+  const refreshAllBalances = async (retryCount = 0, maxRetries = 3) => {
     try {
       setIsLoadingBalance(true);
       console.log('开始刷新所有余额...');
-      addDebugLog(`🔄 开始刷新所有余额`, 'info');
+      addDebugLog(`🔄 开始刷新所有余额 (第${retryCount + 1}次尝试)`, 'info');
+      
+      // 先检查网络连接
+      if (provider) {
+        try {
+          await provider.getNetwork();
+          addDebugLog('✅ 网络连接正常', 'success');
+        } catch (networkError) {
+          addDebugLog(`❌ 网络连接异常: ${networkError.message}`, 'error');
+          throw new Error(`网络连接失败: ${networkError.message}`);
+        }
+      }
       
       const results = await Promise.all([getBRBalance(), getUSDTBalance()]);
       
@@ -527,9 +665,23 @@ const CycleTrading = ({ account, provider, chainId }) => {
       console.error('错误信息:', error.message);
       console.error('完整错误:', error);
       addDebugLog(`❌ 刷新余额失败: ${error.message}`, 'error');
-      return ['0', '0'];
+      
+      // 如果还有重试次数，则进行重试
+      if (retryCount < maxRetries) {
+        const delayTime = (retryCount + 1) * 1000; // 递增延迟时间
+        addDebugLog(`⏳ ${delayTime/1000}秒后进行第${retryCount + 2}次重试...`, 'warning');
+        
+        await new Promise(resolve => setTimeout(resolve, delayTime));
+        return await refreshAllBalances(retryCount + 1, maxRetries);
+      } else {
+        addDebugLog(`❌ 已达到最大重试次数(${maxRetries + 1})，余额刷新失败`, 'error');
+        return ['0', '0'];
+      }
     } finally {
-      setIsLoadingBalance(false);
+      // 只有在最后一次重试时才设置加载状态为false
+      if (retryCount === 0) {
+        setIsLoadingBalance(false);
+      }
     }
   };
 
@@ -1455,9 +1607,14 @@ const CycleTrading = ({ account, provider, chainId }) => {
   return (
     <div className="cycle-trading">
       <h2>🔄 循环交易</h2>
-      <p className="trading-description">
-        自动化循环交易：购买BR → 卖出BR → 重复循环
-      </p>
+      <div className="page-info">
+        <p className="trading-description">
+          {PAGE_CONFIG.description}
+        </p>
+        <p className="disclaimer">
+          {PAGE_CONFIG.disclaimer}
+        </p>
+      </div>
 
       {!account ? (
         <div className="no-wallet">
