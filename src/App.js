@@ -378,7 +378,7 @@ function App() {
   const renderNavigation = () => (
     <nav className="navigation">
       <div className="nav-brand">
-        <h1>🌟 Alpha Shuafen DApp</h1>
+        <h1>🌟 Alpha刷分工具</h1>
       </div>
       <div className="nav-links">
         <button 

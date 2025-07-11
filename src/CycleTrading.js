@@ -365,12 +365,12 @@ const CycleTrading = ({ account, provider, chainId }) => {
       
       if (needsPriceInversion) {
         // 需要倒数处理的代币（如quq）
-        // 反向查询时：如果正向需要倒数，反向就用直接除法
-        reverseFinalPrice = price;  // 不倒数
+        // 反向查询时：使用正向计算的倒数价格
+        reverseFinalPrice = 1 / price;  // 使用倒数价格
         usdtOutput = (brAmountFloat / reverseFinalPrice).toString();
-        priceCalculationMethod = '反向直接除法计算';
-        console.log('反向查询使用直接除法: BR / price =', usdtOutput);
-        addDebugLog(`🔄 反向查询用直接价格: ${reverseFinalPrice.toFixed(10)}`, 'info');
+        priceCalculationMethod = '反向倒数除法计算';
+        console.log('反向查询使用倒数除法: BR / (1/price) =', usdtOutput);
+        addDebugLog(`🔄 反向查询用倒数价格: ${reverseFinalPrice.toFixed(10)}`, 'info');
       } else {
         // 不需要倒数处理的代币（如KOGE、BR）
         // 反向查询时：正常除法
@@ -1031,8 +1031,10 @@ const CycleTrading = ({ account, provider, chainId }) => {
       setCycleStatus(`第 ${cycleIndex} 次循环：刷新余额...`);
       
       // 刷新余额并记录购买前的BR余额
-      await refreshAllBalances();
-      const brBalanceBeforeBuy = parseFloat(brBalance); // 记录购买前的BR余额
+      const balanceResults = await refreshAllBalances();
+      const brBalanceBeforeBuy = parseFloat(balanceResults[0]); // 直接使用refreshAllBalances的返回值，确保是最新的
+      
+      addDebugLog(`📊 第 ${cycleIndex} 次循环购买前余额确认: ${brBalanceBeforeBuy} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`, 'info');
       
       // 检查是否被用户停止
       if (shouldStopRef.current) {
@@ -1061,30 +1063,37 @@ const CycleTrading = ({ account, provider, chainId }) => {
       
       const minBRAmount = (parseFloat(expectedBRAmount) * 0.99985).toFixed(8);
       
-      addDebugLog(`🔔 准备发起第 ${cycleIndex} 次循环的购买BR交易，即将拉起钱包...`, 'info');
-      addDebugLog(`购买前BR余额: ${brBalanceBeforeBuy} BR`, 'info');
+      addDebugLog(`🔔 准备发起第 ${cycleIndex} 次循环的购买${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}交易，即将拉起钱包...`, 'info');
+      addDebugLog(`购买前${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}余额: ${brBalanceBeforeBuy} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`, 'info');
       setCycleStatus(`第 ${cycleIndex} 次循环：准备购买BR，等待钱包签名...`);
       
       const buyReceipt = await executeTransaction(true, usdtAmountPerCycle, minBRAmount);
       
-      addDebugLog(`✅ 第 ${cycleIndex} 次循环的购买BR交易已完成，交易hash: ${buyReceipt.transactionHash}`, 'success');
+      addDebugLog(`✅ 第 ${cycleIndex} 次循环的购买${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}交易已完成，交易hash: ${buyReceipt.transactionHash}`, 'success');
       
       // 等待BR余额更新
-      const minimumBrExpected = brBalanceBeforeBuy + parseFloat(minBRAmount) * 0.8; // 购买前余额 + 预期购买量的80%
+      const minimumBrExpected = brBalanceBeforeBuy + parseFloat(minBRAmount); // 购买前余额 + 预期最小值
+      
+      addDebugLog(`📊 第 ${cycleIndex} 次循环余额更新等待参数:`, 'info');
+      addDebugLog(`  购买前余额: ${brBalanceBeforeBuy} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`, 'info');
+      addDebugLog(`  最低期望购买: ${parseFloat(minBRAmount)} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`, 'info');
+      addDebugLog(`  80%安全值: ${parseFloat(minBRAmount) * 0.8} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`, 'info');
+      addDebugLog(`  最低期望总余额: ${minimumBrExpected} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`, 'info');
+      
       setCycleStatus(`第 ${cycleIndex} 次循环：等待BR余额更新...`);
       const currentBrBalance = await waitForBalanceUpdate(
         getBRBalance,
         minimumBrExpected,
-        'BR余额'
+        `${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}余额`
       );
       
       // 计算实际购买到的BR数量
       const actualBrBought = parseFloat(currentBrBalance) - brBalanceBeforeBuy;
-      addDebugLog(`📊 第 ${cycleIndex} 次循环购买BR统计:`, 'info');
-      addDebugLog(`  购买前余额: ${brBalanceBeforeBuy} BR`, 'info');
-      addDebugLog(`  购买后余额: ${parseFloat(currentBrBalance)} BR`, 'info');
-      addDebugLog(`  实际购买: ${actualBrBought} BR`, 'info');
-      addDebugLog(`  预期购买: ${parseFloat(expectedBRAmount)} BR`, 'info');
+      addDebugLog(`📊 第 ${cycleIndex} 次循环购买${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}统计:`, 'info');
+      addDebugLog(`  购买前余额: ${brBalanceBeforeBuy} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`, 'info');
+      addDebugLog(`  购买后余额: ${parseFloat(currentBrBalance)} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`, 'info');
+      addDebugLog(`  实际购买: ${actualBrBought} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`, 'info');
+      addDebugLog(`  预期购买: ${parseFloat(expectedBRAmount)} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`, 'info');
       
       // 检查是否被用户停止
       if (shouldStopRef.current) {
@@ -1093,13 +1102,13 @@ const CycleTrading = ({ account, provider, chainId }) => {
       
       // 验证是否购买到了足够的BR
       if (actualBrBought <= 0) {
-        addDebugLog(`❌ 购买BR失败，实际购买数量: ${actualBrBought}`, 'error');
+        addDebugLog(`❌ 购买${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}失败，实际购买数量: ${actualBrBought}`, 'error');
         showErrorModal(
-          '购买BR失败',
-          `第 ${cycleIndex} 次循环购买BR失败：\n\n实际购买数量: ${actualBrBought} BR\n预期购买数量: ${parseFloat(expectedBRAmount)} BR\n\n可能原因：\n1. 交易滑点过大\n2. 流动性不足\n3. 网络拥堵导致交易失败\n\n建议：减少交易数量或稍后重试`,
+          `购买${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}失败`,
+          `第 ${cycleIndex} 次循环购买${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}失败：\n\n实际购买数量: ${actualBrBought} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}\n预期购买数量: ${parseFloat(expectedBRAmount)} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}\n\n可能原因：\n1. 交易滑点过大\n2. 流动性不足\n3. 网络拥堵导致交易失败\n\n建议：减少交易数量或稍后重试`,
           true
         );
-        throw new Error(`购买BR失败，实际购买数量: ${actualBrBought}`);
+        throw new Error(`购买${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}失败，实际购买数量: ${actualBrBought}`);
       }
       
       setCycleStatus(`第 ${cycleIndex} 次循环：计算卖出USDT数量...`);
@@ -1123,14 +1132,14 @@ const CycleTrading = ({ account, provider, chainId }) => {
       
       setCycleStatus(`第 ${cycleIndex} 次循环：卖出BR...`);
       addDebugLog(`📊 第 ${cycleIndex} 次循环卖出参数:`, 'info');
-      addDebugLog(`  卖出BR数量: ${actualBrBought.toFixed(8)} BR`, 'info');
-      addDebugLog(`  总BR余额: ${currentBrBalance} BR`, 'info');
+      addDebugLog(`  卖出${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}数量: ${actualBrBought.toFixed(8)} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`, 'info');
+      addDebugLog(`  总${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}余额: ${currentBrBalance} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`, 'info');
       addDebugLog(`  预期USDT输出: ${expectedUSDTAmount} USDT`, 'info');
       addDebugLog(`  最低USDT输出: ${minUSDTAmount} USDT`, 'info');
       addDebugLog(`  卖出前USDT余额: ${usdtBalanceBeforeSell} USDT`, 'info');
       
-      addDebugLog(`🔔 准备发起第 ${cycleIndex} 次循环的卖BR交易，即将拉起钱包...`, 'info');
-      addDebugLog(`🔥 重要：只卖出本次购买的 ${actualBrBought.toFixed(8)} BR，保留用户原有的BR`, 'warning');
+      addDebugLog(`🔔 准备发起第 ${cycleIndex} 次循环的卖${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}交易，即将拉起钱包...`, 'info');
+      addDebugLog(`🔥 重要：只卖出本次购买的 ${actualBrBought.toFixed(8)} ${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}，保留用户原有的${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}`, 'warning');
       setCycleStatus(`第 ${cycleIndex} 次循环：准备卖出BR，等待钱包签名...`);
       
       // executeTransaction(isUsdtToBr, usdtAmount, brAmount)
@@ -1138,7 +1147,7 @@ const CycleTrading = ({ account, provider, chainId }) => {
       // 重要修改：使用 actualBrBought 而不是 currentBrBalance
       const sellReceipt = await executeTransaction(false, minUSDTAmount, actualBrBought.toFixed(8));
       
-      addDebugLog(`✅ 第 ${cycleIndex} 次循环的卖BR交易已完成，交易hash: ${sellReceipt.transactionHash}`, 'success');
+      addDebugLog(`✅ 第 ${cycleIndex} 次循环的卖${TOKEN_CONFIGS[selectedToken]?.symbol || 'TOKEN'}交易已完成，交易hash: ${sellReceipt.transactionHash}`, 'success');
       
       // 等待USDT余额更新
       const expectedUsdtBalanceAfterSell = parseFloat(usdtBalanceBeforeSell) + parseFloat(minUSDTAmount) * 0.8; // 预期的80%作为最小值
@@ -1242,28 +1251,39 @@ const CycleTrading = ({ account, provider, chainId }) => {
       return;
     }
     
-    // 调试：检查总USDT余额是否足够
-    const totalUsdtNeeded = parseFloat(usdtAmountPerCycle) * parseInt(cycleCount);
+    // 调试：检查总USDT余额是否足够（包含手续费）
+    const singleUsdtAmount = parseFloat(usdtAmountPerCycle);
+    const totalCycles = parseInt(cycleCount);
+    const feeRate = 0.0003; // 万分之三手续费
+    const totalUsdtNeeded = singleUsdtAmount * (1 + totalCycles * feeRate);
+    
     console.log('余额检查:', { 
       usdtBalance, 
+      singleUsdtAmount,
+      totalCycles,
+      feeRate,
       totalUsdtNeeded, 
       currentBalance: parseFloat(usdtBalance),
       sufficient: parseFloat(usdtBalance) >= totalUsdtNeeded 
     });
-    addDebugLog(`余额检查: 当前${parseFloat(usdtBalance).toFixed(6)} USDT, 需要${totalUsdtNeeded.toFixed(6)} USDT`, 'info');
+    addDebugLog(`余额检查: 当前${parseFloat(usdtBalance).toFixed(6)} USDT`, 'info');
+    addDebugLog(`单次USDT: ${singleUsdtAmount.toFixed(6)}, 循环次数: ${totalCycles}, 手续费率: ${(feeRate * 100).toFixed(2)}%`, 'info');
+    addDebugLog(`总需要: ${singleUsdtAmount.toFixed(6)} × (1 + ${totalCycles} × ${feeRate}) = ${totalUsdtNeeded.toFixed(6)} USDT`, 'info');
     
     if (parseFloat(usdtBalance) < totalUsdtNeeded) {
       console.log('❌ USDT余额不足');
       addDebugLog('❌ USDT余额不足', 'error');
+      const totalFees = singleUsdtAmount * totalCycles * feeRate;
       showErrorModal(
         'USDT余额不足',
-        `无法开始循环交易，余额不足：\n\n需要: ${totalUsdtNeeded.toFixed(6)} USDT\n当前: ${parseFloat(usdtBalance).toFixed(6)} USDT\n缺少: ${(totalUsdtNeeded - parseFloat(usdtBalance)).toFixed(6)} USDT\n\n请充值USDT后再试`,
+        `无法开始循环交易，余额不足：\n\n单次USDT: ${singleUsdtAmount.toFixed(6)} USDT\n循环次数: ${totalCycles} 次\n预估手续费: ${totalFees.toFixed(6)} USDT (${(feeRate * 100).toFixed(2)}% × ${totalCycles}次)\n总需要: ${totalUsdtNeeded.toFixed(6)} USDT\n当前余额: ${parseFloat(usdtBalance).toFixed(6)} USDT\n缺少: ${(totalUsdtNeeded - parseFloat(usdtBalance)).toFixed(6)} USDT\n\n请充值USDT后再试`,
         false
       );
       return;
     }
     
-    const confirmMessage = `循环次数: ${cycleCount} 次\n每次USDT数量: ${parseFloat(usdtAmountPerCycle).toFixed(6)} USDT\n总计需要: ${totalUsdtNeeded.toFixed(6)} USDT\n当前余额: ${parseFloat(usdtBalance).toFixed(6)} USDT`;
+    const totalFees = singleUsdtAmount * totalCycles * feeRate;
+    const confirmMessage = `循环次数: ${totalCycles} 次\n每次USDT数量: ${singleUsdtAmount.toFixed(6)} USDT\n预估手续费: ${totalFees.toFixed(6)} USDT (${(feeRate * 100).toFixed(2)}% × ${totalCycles}次)\n总计需要: ${totalUsdtNeeded.toFixed(6)} USDT\n当前余额: ${parseFloat(usdtBalance).toFixed(6)} USDT`;
     
     console.log('🔔 即将显示自定义确认窗口');
     console.log('确认消息:', confirmMessage);
