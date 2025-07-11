@@ -59,6 +59,14 @@ const CycleTrading = ({ account, provider, chainId }) => {
     description: "选择你要刷量的币种，输入需要刷几次，每次刷多少USDT，典型的15分，需要循环16次，每次1025 USDT，会自动拉起钱包，按确定并扫脸即可完成。推荐quq，会自动返还部分手续费！",
     disclaimer: "⚠️ 免责声明：本工具为免费提供，仅供学习和研究使用。数字货币交易存在风险，我们不承担因使用本工具而造成的任何损失或后果。使用本产品即代表您已阅读并同意该免责协议。请谨慎操作，理性投资。"
   };
+
+  // 版本信息配置 - 发布时手动更新
+  const VERSION_INFO = {
+    version: "v1.0.0",
+    buildTime: "2025-07-11 10:30:00",
+    gitHash: "main-002",
+    description: "Alpha刷分工具"
+  };
   
   // 基础配置
   const TOKEN_A_ADDRESS = '0x55d398326f99059ff775485246999027b3197955'; // USDT（固定）
@@ -1951,6 +1959,18 @@ const CycleTrading = ({ account, provider, chainId }) => {
           </div>
         </div>
       )}
+
+      {/* 版本信息 */}
+      <div className="version-info">
+        <div className="version-content">
+          <span className="version-text">
+            {VERSION_INFO.description} {VERSION_INFO.version}
+          </span>
+          <span className="build-info">
+            构建时间: {VERSION_INFO.buildTime} | Git: {VERSION_INFO.gitHash}
+          </span>
+        </div>
+      </div>
     </div>
   );
 };
